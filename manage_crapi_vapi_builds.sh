@@ -55,14 +55,12 @@ function start_apis() {
 function clean_apis() {
     echo "Stopping services and cleaning up..."
     cd /opt/lab/crapi
-    sudo docker-compose rm -s -f -v
+    sudo docker-compose down --rmi all -v
 
     cd ../vapi
-    sudo docker-compose rm -s -f -v
+    sudo docker-compose down --rmi all -v
 
     cd ..
-    sudo docker image prune -a -f
-    sudo docker volume prune -f
 
     rm -rf crapi
     rm -rf vapi
