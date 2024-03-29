@@ -32,7 +32,7 @@ function ensure_dir() {
 
 function query_external_access() {
     while true; do
-        echo "\n\nDo you want to make the API accessible externally from the server? (y/n)"
+        echo "#### Do you want to make the API accessible externally from the server? (y/n)"
         read -r external_access
 
         case $external_access in
@@ -58,8 +58,9 @@ EOF
 }
 
 function setup_dvga() {
+    echo "Setting up Damn Vulnerable GraphQL Application..."
     local service_dir="$base_dir/dvga"
-    if [ ! -d "$service_dir" ]; then
+    if [ ! -f "$service_dir/Dockerfile" ]; then
         git clone -b blackhatgraphql https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git "$service_dir"
         sed -i 's/\/opt\/dvga/\/opt\/lab\/dvga/g' "$service_dir/Dockerfile"
         cat <<EOF >"$service_dir/docker-compose.yml"
