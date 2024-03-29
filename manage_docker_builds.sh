@@ -47,7 +47,7 @@ function setup_dvga() {
     local service_dir="$base_dir/dvga"
     if [ ! -d "$service_dir" ]; then
         git clone -b blackhatgraphql https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git "$service_dir"
-        sed -i 's/\opt\/dvga/\/opt\/lab\/dvga/g' "$service_dir/Dockerfile"
+        sed -i 's/\/opt\/dvga/\/opt\/lab\/dvga/g' "$service_dir/Dockerfile"
     else
         (cd "$service_dir" && git pull)
     fi
