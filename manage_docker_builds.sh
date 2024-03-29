@@ -2,9 +2,9 @@
 
 # Define services and their setup information
 declare -A services=(
-    ["juice-shop"]="services:\n  juice-shop:\n    image: bkimminich/juice-shop\n    ports:\n      - \"3000:3000\"\n    restart: unless-stopped"
+    ["juice-shop"]="setup_juice_shop"
     ["crapi"]="https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml"
-    ['dvga']="https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git"
+    ['dvga']="setup_dvga"
     ["vapi"]="https://github.com/roottusk/vapi.git"
 )
 
@@ -32,7 +32,7 @@ function ensure_dir() {
 
 function query_external_access() {
     while true; do
-        echo "\n\nDo you want to make the API accessible externally from the server? (y/n)"
+        echo "#### Do you want to make the API accessible externally from the server? (y/n)"
         read -r external_access
 
         case $external_access in
@@ -43,15 +43,27 @@ function query_external_access() {
     done
 }
 
-function setup_dvga() {
-    local service_dir="$base_dir/dvga"
-    if [ ! -d "$service_dir" ]; then
-        git clone -b blackhatgraphql https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git "$service_dir"
-        sed -i 's/\opt\/dvga/\/opt\/lab\/dvga/g' "$service_dir/Dockerfile"
-    else
-        (cd "$service_dir" && git pull)
-    fi
+function setup_juice_shop() {
+    echo "Setting up Juice Shop..."
+    local service_dir="$base_dir/juice-shop"
+    ensure_dir "$service_dir"
     cat <<EOF >"$service_dir/docker-compose.yml"
+services:
+  juice-shop:
+    image: bkimminich/juice-shop
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+EOF
+}
+
+function setup_dvga() {
+    echo "Setting up Damn Vulnerable GraphQL Application..."
+    local service_dir="$base_dir/dvga"
+    if [ ! -f "$service_dir/Dockerfile" ]; then
+        git clone -b blackhatgraphql https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git "$service_dir"
+        sed -i 's/\/opt\/dvga/\/opt\/lab\/dvga/g' "$service_dir/Dockerfile"
+        cat <<EOF >"$service_dir/docker-compose.yml"
 services:
   dvga:
     build:
@@ -65,8 +77,7 @@ services:
       - WEB_HOST=127.0.0.1
     restart: unless-stopped
 EOF
-    # Clone the repo if it doesn't already exist
-    echo "DVGA setup complete. Use docker-compose up to start."
+    fi
 }
 
 function setup_docker_compose() {
@@ -82,7 +93,7 @@ function setup_docker_compose() {
         else
             echo "Updating docker-compose.yml for $service"
             if [[ $compose_file != http* ]]; then
-                cat <<EOF >"$service_dir/docker-compose.yml"
+                cat >"$service_dir/docker-compose.yml" <<EOF
 $compose_file
 EOF
             else
@@ -96,11 +107,15 @@ EOF
         elif [[ $compose_file == *.git ]]; then
             echo "Cloning $compose_file into $service_dir"
             git clone "$compose_file" "$service_dir"
+        elif [[ $compose_file == "setup_"* ]]; then
+            echo "Setting up $service..."
+            $compose_file
         else
-            echo "Creating docker-compose.yml for $service"
-            cat <<EOF >"$service_dir/docker-compose.yml"
+            echo "Writing docker-compose.yml for $service"
+            cat >"$service_dir/docker-compose.yml" <<EOF
 $compose_file
 EOF
+
         fi
         if [[ $service == "crapi" || $service == 'dvga' ]]; then
             if query_external_access; then
@@ -116,16 +131,20 @@ EOF
 function manage_service() {
     local service=$1
     local action=$2 # install, start, stop, clean
+    local service_dir="$base_dir/$service"
 
-    if [[ $service == "dvga" ]]; then
-        if [[ $action == "install" || $action == "update" ]]; then
-            setup_dvga
-            return
-        elif [[ $action != "install" && $action != "update" ]] && ! is_service_installed "dvga"; then
-            echo "DVGA is not installed."
-            return
-        fi
-    fi
+#    if [[ $service == "dvga" ]]; then
+#        if [[ $action == "install" || $action == "update" ]]; then
+#            setup_dvga
+#            if [[ $service == "crapi" || $service == 'dvga' ]]; then
+#                if query_external_access; then
+#                    sudo sed -i 's/127.0.0.1/0.0.0.0/g' $service_dir/docker-compose.yml
+#                fi
+#            fi
+#            (cd "$service_dir" && sudo docker-compose pull && sudo docker-compose up -d)
+#            return
+#        fi
+#    fi
 
     if [[ $action != "install" && $action != "update" ]] && ! is_service_installed "$service"; then
         echo "Service $service is not installed."
