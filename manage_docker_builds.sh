@@ -108,7 +108,7 @@ EOF
             git clone "$compose_file" "$service_dir"
         elif [[ $compose_file == "setup_"* ]]; then
             echo "Setting up $service..."
-            $compose_info
+            $compose_file
         else
             echo "Writing docker-compose.yml for $service"
             cat >"$service_dir/docker-compose.yml" <<EOF
