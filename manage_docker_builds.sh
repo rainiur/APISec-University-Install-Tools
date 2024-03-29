@@ -44,6 +44,7 @@ function query_external_access() {
 }
 
 function setup_juice_shop() {
+    echo "Setting up Juice Shop..."
     local service_dir="$base_dir/juice-shop"
     ensure_dir "$service_dir"
     cat <<EOF >"$service_dir/docker-compose.yml"
@@ -105,7 +106,7 @@ EOF
         elif [[ $compose_file == *.git ]]; then
             echo "Cloning $compose_file into $service_dir"
             git clone "$compose_file" "$service_dir"
-        elif [[ $compose_info == "setup_"* ]]; then
+        elif [[ $compose_file == "setup_"* ]]; then
             echo "Setting up $service..."
             $compose_info
         else
