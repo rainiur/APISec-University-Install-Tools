@@ -114,6 +114,7 @@ EOF
             cat >"$service_dir/docker-compose.yml" <<EOF
 $compose_file
 EOF
+
         fi
         if [[ $service == "crapi" || $service == 'dvga' ]]; then
             if query_external_access; then
