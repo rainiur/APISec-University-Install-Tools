@@ -2,7 +2,7 @@
 
 # Define services and their setup information
 declare -A services=(
-    ["juice-shop"]="services:\n  juice-shop:\n    image: bkimminich/juice-shop\n    ports:\n      - \"3000:3000\"\n    restart: unless-stopped"
+    ["juice-shop"]=$'services:\n  juice-shop:\n    image: bkimminich/juice-shop\n    ports:\n      - \"3000:3000\"\n    restart: unless-stopped'
     ["crapi"]="https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml"
     ['dvga']="https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git"
     ["vapi"]="https://github.com/roottusk/vapi.git"
