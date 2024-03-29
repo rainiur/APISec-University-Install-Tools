@@ -116,13 +116,17 @@ EOF
 function manage_service() {
     local service=$1
     local action=$2 # install, start, stop, clean
+    local service_dir="$base_dir/$service"
 
     if [[ $service == "dvga" ]]; then
         if [[ $action == "install" || $action == "update" ]]; then
             setup_dvga
-            return
-        elif [[ $action != "install" && $action != "update" ]] && ! is_service_installed "dvga"; then
-            echo "DVGA is not installed."
+            if [[ $service == "crapi" || $service == 'dvga' ]]; then
+                if query_external_access; then
+                    sudo sed -i 's/127.0.0.1/0.0.0.0/g' $service_dir/docker-compose.yml
+                fi
+            fi
+            (cd "$service_dir" && sudo docker-compose pull && sudo docker-compose up -d)
             return
         fi
     fi
