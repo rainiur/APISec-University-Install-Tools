@@ -82,7 +82,7 @@ function setup_docker_compose() {
         else
             echo "Updating docker-compose.yml for $service"
             if [[ $compose_file != http* ]]; then
-                cat <<EOF >"$service_dir/docker-compose.yml"
+                cat >"$service_dir/docker-compose.yml" <<EOF
 $compose_file
 EOF
             else
