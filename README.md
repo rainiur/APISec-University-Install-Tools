@@ -10,10 +10,10 @@ This script installs all of the applications for the course. Although you will s
 
 This is an updated script for multiple hacking docker images. I wanted to have more than just the APISec University images to play with. 
 
-crapi - completely ridiculous API  
-vapi - Vulnerable Adversely Programmed Interface  
-dvga - Damn Vulnerable GraphQL Application  
-juice-shop - OWASP Juice Shop
+crapi - completely ridiculous API : Port 8888  
+vapi - Vulnerable Adversely Programmed Interface : Port 80  
+dvga - Damn Vulnerable GraphQL Application : Port 5013  
+juice-shop - OWASP Juice Shop : Port 3000  
 
 This script will ***install, update, start, stop, clean*** any of these docker images. You also have the ability to allow external visibility on the docker containers. vAPI and Juice Shop and exteernally accessible by default. The script also allows for configuring dvga and crapi for external connectivity. <span style="color:red">(Warning: Probably best not to use this on an internet facing server.)</span>
 
