@@ -11,7 +11,7 @@ This script installs all of the applications for the course. Although you will s
 This is an updated script for multiple hacking docker images. I wanted to have more than just the APISec University images to play with. 
 
 crapi - completely ridiculous API : Port 8888  
-vapi - Vulnerable Adversely Programmed Interface : Port 80  
+vapi - Vulnerable Adversely Programmed Interface : Port 8000  
 dvga - Damn Vulnerable GraphQL Application : Port 5013  
 juice-shop - OWASP Juice Shop : Port 3000  
 

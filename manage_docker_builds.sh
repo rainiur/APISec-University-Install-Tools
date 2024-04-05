@@ -90,6 +90,9 @@ function setup_docker_compose() {
         echo "$service is already installed, performing update..."
         if [[ $compose_file == *.git ]]; then
             (cd "$service_dir" && git pull)
+            if [[ $service == "vapi" ]]; then
+                sudo sed -i 's/80:80/8000:80/g' $service_dir/docker-compose.yml
+            fi
         else
             echo "Updating docker-compose.yml for $service"
             if [[ $compose_file != http* ]]; then
@@ -107,6 +110,9 @@ EOF
         elif [[ $compose_file == *.git ]]; then
             echo "Cloning $compose_file into $service_dir"
             git clone "$compose_file" "$service_dir"
+            if [[ $service == "vapi" ]]; then
+                sudo sed -i 's/80:80/8000:80/g' $service_dir/docker-compose.yml
+            fi
         elif [[ $compose_file == "setup_"* ]]; then
             echo "Setting up $service..."
             $compose_file
