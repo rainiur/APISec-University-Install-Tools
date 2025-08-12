@@ -77,3 +77,124 @@ These apps are intentionally vulnerable. Do not expose them to the internet. Use
 
 `apisec_tool_install.sh` installs desktop tooling (Burp, ZAP, Postman, etc.). The Docker management scripts have been consolidated into `manage_vuln_services.sh`. The previous scripts `manage_docker_builds.sh` and `manage_crapi_vapi_builds.sh` are deprecated and removed.
 
+## Prerequisites
+
+- Docker Engine + Docker Compose plugin
+- Linux host with sudo
+- Internet access for first-time pulls/clones
+
+## Quickstart
+
+```bash
+chmod +x manage_vuln_services.sh
+sudo ./manage_vuln_services.sh install all
+sudo ./manage_vuln_services.sh start webgoat
+```
+
+## Flags
+
+- `--expose` Enable external exposure (0.0.0.0 host binding where applicable). Defaults to loopback only.
+- `--force`  Skip confirmation prompts (currently used by `uninstall`).
+
+## Actions
+
+- `install`  Install or update and start services
+- `update`   Update and restart services
+- `start`    Start services
+- `stop`     Stop services
+- `clean`    Remove services and data under `/opt/lab/<service>` (supports `all`)
+- `uninstall <service>` Remove a single service (containers/images/volumes + `/opt/lab/<service>`). Prompts for confirmation unless `--force`.
+
+## Directory layout
+
+Each service is managed under `/opt/lab/<service>/` and typically contains:
+
+- `.env`            Service-specific ports and settings
+- `docker-compose.yml` or `.yaml`
+- Optional `.compose.sha256` (TOFU) and `.locked_ref` (pinned git ref)
+- Optional `.allow_build` marker to permit local image builds
+- Service artifacts (cloned sources, configs, volumes)
+
+## Service notes
+
+- `crapi`
+  - Uses upstream compose. Healthcheck override uses wget-based probe. Gateway service auto-detected.
+  - If upstream compose changes, set `ALLOW_COMPOSE_CHANGE=true` on `update`.
+
+- `vapi`
+  - Local build supported. Script creates `.allow_build` when `build:` is present.
+  - Host port via `/opt/lab/vapi/.env` `VAPI_PORT`.
+
+- `dvga`
+  - Cloned from `dolevf/Damn-Vulnerable-GraphQL-Application` (branch `blackhatgraphql`).
+  - Compose uses local `build:`; `.allow_build` is created to enable building.
+  - Host port via `/opt/lab/dvga/.env` `DVGA_PORT`.
+
+- `webgoat`
+  - Healthcheck replaced with wget-based probe; default port `WEBGOAT_PORT=8080`.
+
+- `juice-shop`
+  - Runs official image `bkimminich/juice-shop`. Default port `JUICESHOP_PORT=3000`.
+
+## Healthchecks
+
+- Replaced brittle shell features (`/dev/tcp`, missing `curl`) with `wget` or BusyBox fallback.
+- Overrides are generated as `docker-compose.override.yml` where needed (e.g., crAPI, WebGoat).
+
+## Build policy and local images
+
+- Some services define `build:` in compose.
+- The script only allows Compose to build when `.allow_build` exists under the service directory.
+- This prevents accidental long builds unless explicitly required or auto-detected.
+
+## Ports and exposure
+
+- Default host bindings are 127.0.0.1 for safety. Use `--expose` to bind to all interfaces.
+- Ports are configurable per-service via each `.env` file.
+
+## Troubleshooting
+
+- __Image pull denied / No such image__
+  - Cause: Service expects local build or image name changed upstream.
+  - Fix: Ensure `.allow_build` exists and rerun `update`/`start`, or manually run `docker compose build` in `/opt/lab/<service>/`.
+
+- __crAPI healthcheck failing__
+  - Fix: Run `update crapi` to regenerate override; script auto-detects the gateway service and writes a wget-based healthcheck.
+
+- __WebGoat healthcheck failing (curl missing)__
+  - Fix: The script now adds a wget-based check via override. Run `update webgoat` then `start webgoat`.
+
+- __YAML parse/port conflicts__
+  - Fix: Ports normalized and parameterized; adjust port in the service `.env` and restart.
+
+## Security posture and safe use
+
+- These applications are intentionally vulnerable. Keep them off the public internet.
+- Defaults favor safety:
+  - Loopback bindings by default, explicit `--expose` to open.
+  - No inline secrets in compose; per-service `.env` files are used.
+  - Supply-chain TOFU pinning for composes and git sources.
+
+## Observability and logging
+
+- Script logs are UTC-timestamped and structured for easy scraping.
+- Avoid logging sensitive secrets; rotate `.env` values as needed.
+
+## Updating and pinning
+
+- First-time use pins upstream compose by checksum and git repos by commit.
+- `ALLOW_COMPOSE_CHANGE=true` allows compose updates during `update` and re-pins.
+
+## Uninstalling a service
+
+```bash
+sudo ./manage_vuln_services.sh uninstall <service>
+```
+
+- Prompts for confirmation; use `--force` to skip.
+- Removes containers, images for the project, volumes, networks, and the entire directory `/opt/lab/<service>`.
+
+## Contributing
+
+- Issues and PRs welcome. Keep files under ~750 lines, prefer secure defaults, and avoid hard-coded secrets.
+- Document major changes and update this README accordingly.
