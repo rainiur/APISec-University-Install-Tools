@@ -102,6 +102,10 @@ security_shepherd_post() {
   else
     echo 'DB_PORT_MAPPED_HOST=3307' >> "$env_file"
   fi
+  # If compose uses local build contexts, allow building
+  if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
+    touch "$dir/.allow_build"
+  fi
 }
 
 # Fix crAPI gateway healthcheck (avoid /dev/tcp); create override with wget-based probe
@@ -298,6 +302,8 @@ services:
       - WEB_HOST=127.0.0.1
     restart: unless-stopped
 EOF
+  # Allow docker compose to build the local image rather than trying to pull a non-existent 'dvga:latest'
+  touch "$dir/.allow_build"
 }
 
 setup_webgoat() {
@@ -468,6 +474,10 @@ vapi_post() {
       echo "APP_KEY=base64:${genkey}" >>"$env_file"
     fi
   fi
+  # If compose uses local build contexts, allow building
+  if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
+    touch "$dir/.allow_build"
+  fi
 }
 
 # ---------- core actions ----------
@@ -574,6 +584,7 @@ install_update_wrapper() { install_or_update_service "$@"; }
 start_wrapper()          { local name="$1"; shift 4 || true; start_service "$name"; }
 stop_wrapper()           { local name="$1"; shift 4 || true; stop_service "$name"; }
 clean_wrapper()          { local name="$1"; shift 4 || true; clean_service "$name"; }
+uninstall_wrapper()      { local name="$1"; clean_service "$name"; }
 
 # ---------- dependency bootstrap (optional) ----------
 ensure_docker() {
@@ -595,12 +606,14 @@ Actions:
   start     Start services
   stop      Stop services
   clean     Remove services and data under $BASE_DIR/<service>
+  uninstall Remove a SINGLE service and its data (safer alias of clean; does not allow 'all')
 
 Services:
   crapi, vapi, dvga, juice-shop, or 'all'
 
 Flags:
   --expose  Enable external exposure (0.0.0.0 host binding where applicable)
+  --force   Skip confirmation prompts for uninstall
 
 Env (advanced):
   ALLOW_COMPOSE_CHANGE=true  Accept upstream compose checksum changes (TOFU)
@@ -613,9 +626,11 @@ main() {
   local action="${1:-}"; shift || true
   local target="${1:-all}"; shift || true
   EXPOSE=false
+  FORCE=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --expose) EXPOSE=true; shift;;
+      --force) FORCE=true; shift;;
       -h|--help) print_help; exit 0;;
       *) log ERROR "Unknown argument: $1"; print_help; exit 1;;
     esac
@@ -632,6 +647,22 @@ main() {
       ;;
     stop)
       for_each_service stop_wrapper "$target"
+      ;;
+    uninstall)
+      # Uninstall only supports a single named service (safer than 'clean all')
+      if [[ "$target" == "all" || -z "$target" ]]; then
+        log ERROR "'uninstall' requires a single service name (not 'all')."; exit 1
+      fi
+      if [[ "$FORCE" != true ]]; then
+        read -r -p "This will permanently remove containers, images, volumes, and directory $BASE_DIR/$target. Continue? [y/N] " ans
+        if [[ ! "$ans" =~ ^[Yy]$ ]]; then
+          log INFO "Uninstall of $target aborted by user"; exit 1
+        fi
+      fi
+      local __t0=$SECONDS
+      uninstall_wrapper "$target" "" "" "" ""
+      local __dt=$(( SECONDS - __t0 ))
+      log INFO "Uninstalled $target and removed $BASE_DIR/$target (took ${__dt}s)"
       ;;
     clean)
       for_each_service clean_wrapper "$target"
