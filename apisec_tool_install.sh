@@ -1,113 +1,107 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+export DEBIAN_FRONTEND=noninteractive
 
-sudo apt update -y
-pid=$!
-wait $pid
+log() { printf '[%(%FT%TZ)T] %s\n' -1 "$*"; }
+trap 'log "ERROR at line $LINENO"; exit 1' ERR
 
-sudo apt upgrade -y
-pid=$!
-wait $pid
+log "Updating system packages..."
+sudo apt-get update -y
+sudo apt-get -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" dist-upgrade -y
+sudo apt-get autoremove -y
 
-sudo apt dist-upgrade -y
-pid=$!
-wait $pid
-
-sudo apt autoremove -y
-pid=$!
-wait $pid
+log "Installing prerequisites..."
+sudo apt-get install -y git zsh make python3 python3-pip pipx firefox ca-certificates curl gnupg unzip
+pipx ensurepath || true
 
 if [ ! -f /opt/jython-standalone-2.7.3.jar ]; then
-	sudo wget https://repo1.maven.org/maven2/org/python/jython-standalone/2.7.3/jython-standalone-2.7.3.jar -O /opt/jython-standalone-2.7.3.jar
-	pid=$!
-	wait $pid
+    log "Installing Jython 2.7.3..."
+    tmp_jy=$(mktemp)
+    wget --https-only --timeout=30 --tries=3 -O "$tmp_jy" "https://repo1.maven.org/maven2/org/python/jython-standalone/2.7.3/jython-standalone-2.7.3.jar"
+    # TODO: Verify checksum/signature before moving to /opt
+    sudo install -m 0644 "$tmp_jy" /opt/jython-standalone-2.7.3.jar
+    rm -f "$tmp_jy"
 fi
 
-echo "Add Foxy Proxy extension and add the following options:"
-echo "Burpsuite 127.0.0.1 Port 8080"
+log "FoxyProxy: ensure extension is installed"
+echo "Add Foxy Proxy extension and configure proxies:"
+echo "BurpSuite 127.0.0.1 Port 8080"
 echo "Postman 127.0.0.1 Port 5555"
-echo $HOME
-found=$(find "$HOME/.mozilla/" -type f -name "foxyproxy*.xpi")
-echo $found
-if [ -n "$found" ]; then
-	sudo wget https://addons.mozilla.org/firefox/downloads/file/4212976/foxyproxy_standard-8.8.xpi 
-	pid=$!
-	wait $pid
-	firefox foxyproxy_standard-8.8.xpi
-	pid=$!
-	wait $pid
+echo "$HOME"
+found="$(find "$HOME/.mozilla/" -type f -name "foxyproxy*.xpi" 2>/dev/null || true)"
+echo "$found"
+if [ -z "$found" ]; then
+    tmpxpi=$(mktemp)
+    wget --https-only --timeout=30 --tries=3 -O "$tmpxpi" "https://addons.mozilla.org/firefox/downloads/file/4212976/foxyproxy_standard-8.8.xpi"
+    firefox -install-addon "$tmpxpi" || true
+    rm -f "$tmpxpi"
 fi
 
-echo "Add jython from /opt and configure Autorize in Burpsuite Extensions"
-if [ ! -f /usr/local/bin/BurpSuitePro ]; then
-    burpsuite
-else
-    BurpSuitePro
-fi
-#BurpSuitePro
-pid=$!
-wait $pid
+log "BurpSuite: Skipping GUI launch during install. See README for Autorize + Jython config."
 
 cd /opt
 
-if [ ! -f /opt/Postman/Postman ]; then
-	echo "Create account and log into Postman and create a new workspace"
-	sudo wget https://dl.pstmn.io/download/latest/linux64 -O postman-linux-x64.tar.gz
-	pid=$!
-	wait $pid
-	sudo tar -xvzf postman-linux-x64.tar.gz
-	pid=$!
-	wait $pid
-	sudo ln -s /opt/Postman/Postman /usr/bin/postman
+if [ ! -x /opt/Postman/Postman ]; then
+    echo "Create account and log into Postman and create a new workspace"
+    log "Installing Postman..."
+    tmp_tgz=$(mktemp)
+    wget --https-only --timeout=30 --tries=3 -O "$tmp_tgz" https://dl.pstmn.io/download/latest/linux64
+    sudo rm -rf /opt/Postman
+    sudo tar -xzf "$tmp_tgz" -C /opt
+    sudo ln -sf /opt/Postman/Postman /usr/bin/postman
+    rm -f "$tmp_tgz"
 fi
 
-sudo pip3 install mitmproxy2swagger
-pid=$!
-wait $pid
+log "Installing mitmproxy2swagger via pipx..."
+pipx install mitmproxy2swagger --force || true
 
-sudo apt install git docker-compose docker.io golang-go zaproxy -y
-pid=$!
-wait $pid
+log "Installing Docker (official repository)..."
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin golang-go zaproxy
+sudo usermod -aG docker "$USER" || true
 
-sudo ln -s /usr/share/zaproxy/zap.sh /usr/bin/zap
-zap -cmd -addonupdate
-zap -cmd -addoninstall openapi
-zap
-pid=$!
-wait $pid
+sudo ln -sf /usr/share/zaproxy/zap.sh /usr/bin/zap
+zap -cmd -addonupdate || true
+zap -cmd -addoninstall openapi || true
 
 # Add hapihacker user
-if [ ! id "hapihacker" &>/dev/null ]; then
-	sudo useradd -m hapihacker
-	sudo usermod -a -G sudo hapihacker
-	sudo chsh -s /bin/zsh hapihacker
-	echo "Create password for hapihacker user"
-	sudo passwd hapihacker
+if ! id -u hapihacker >/dev/null 2>&1; then
+    log "Creating user hapihacker"
+    sudo useradd -m -s /bin/zsh -G sudo hapihacker
+    echo 'hapihacker:CHANGE_ME' | sudo chpasswd
+    sudo chage -d 0 hapihacker
 fi
 
 cd /opt
 if [ ! -f /opt/jwt_tool/jwt_tool.py ]; then
-	sudo git clone https://github.com/ticarpi/jwt_tool
-	pid=$!
-	wait $pid
-	cd jwt_tool
-	sudo python3 -m pip install termcolor cprint pycryptodomex requests
-	pid=$!
-	wait $pid
-	sudo chmod +x jwt_tool.py
-	sudo ln -s /opt/jwt_tool/jwt_tool.py /usr/bin/jwt_tool
+    log "Installing jwt_tool..."
+    sudo git clone https://github.com/ticarpi/jwt_tool /opt/jwt_tool
+    python3 -m venv /opt/jwt_tool/.venv
+    /opt/jwt_tool/.venv/bin/python -m pip install --upgrade pip
+    /opt/jwt_tool/.venv/bin/python -m pip install termcolor cprint pycryptodomex requests
+    sudo chmod +x /opt/jwt_tool/jwt_tool.py
+    # Create wrapper script for PATH
+    sudo tee /usr/bin/jwt_tool >/dev/null <<'EOF'
+#!/usr/bin/env bash
+exec /opt/jwt_tool/.venv/bin/python /opt/jwt_tool/jwt_tool.py "$@"
+EOF
+    sudo chmod +x /usr/bin/jwt_tool
 fi
 
 if [ ! -f /opt/kiterunner/dist/kr ]; then
-	cd /opt
-	sudo git clone https://github.com/assetnote/kiterunner.git
-	cd kiterunner
-	sudo make build
-	sudo ln -s /opt/kiterunner/dist/kr /usr/bin/kr
+    log "Installing kiterunner..."
+    cd /opt
+    sudo git clone https://github.com/assetnote/kiterunner.git
+    cd kiterunner
+    sudo make build
+    sudo ln -sf /opt/kiterunner/dist/kr /usr/bin/kr
 fi
 
-if [ ! -f /opt/Arjun/setup.py ]; then
-	cd /opt
-	sudo git clone https://github.com/s0md3v/Arjun.git
-	cd Arjun
-	sudo python3 setup.py install
+if ! command -v arjun >/dev/null 2>&1; then
+    log "Installing Arjun via pipx..."
+    pipx install arjun --force || true
 fi

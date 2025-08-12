@@ -31,12 +31,12 @@ fi
 # type: compose_url | git | builtin
 # extra: optional post-setup (function name)
 SERVICES=(
-  "name=crapi type=compose_url src=https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml expose_prompt=true"
+  "name=crapi type=compose_url src=https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml expose_prompt=true post=crapi_post"
   "name=vapi type=git src=https://github.com/roottusk/vapi.git expose_prompt=false post=vapi_post"
   "name=dvga type=builtin src=setup_dvga expose_prompt=true"
   "name=juice-shop type=builtin src=setup_juice_shop expose_prompt=false"
   # Additional vulnerable apps
-  "name=webgoat type=builtin src=setup_webgoat expose_prompt=false"
+  "name=webgoat type=builtin src=setup_webgoat expose_prompt=false post=webgoat_post"
   "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
   "name=bwapp type=builtin src=setup_bwapp expose_prompt=false"
   "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post"
@@ -44,7 +44,7 @@ SERVICES=(
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false"
   "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
-  "name=dvws type=git src=https://github.com/stamparm/DVWS.git expose_prompt=false post=dvws_post"
+  "name=dvws type=builtin src=setup_dvws expose_prompt=false"
 )
 
 # ---------- helpers ----------
@@ -60,30 +60,187 @@ security_shepherd_post() {
   write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
   if [[ -f "$dir/docker-compose.yml" ]]; then
     sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${SECURITY_SHEPHERD_PORT:-8083}:80"/g' "$dir/docker-compose.yml" || true
+
+    # Replace non-existent OWASP images with official images
+    # Mongo: use stable 4.2 tag for broad compatibility
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MONGO:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
+    # MariaDB: map to mariadb:10.6.11 to match DB_VERSION
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
   fi
+
+  # Ensure .env has valid images and secure secrets
+  local env_file="$dir/.env"
+  touch "$env_file"
+  # Set image overrides to public images
+  if grep -q '^IMAGE_MONGO=' "$env_file"; then
+    sed -i 's/^IMAGE_MONGO=.*/IMAGE_MONGO=mongo:4.2/' "$env_file"
+  else
+    echo 'IMAGE_MONGO=mongo:4.2' >> "$env_file"
+  fi
+  if grep -q '^IMAGE_MARIADB=' "$env_file"; then
+    sed -i 's/^IMAGE_MARIADB=.*/IMAGE_MARIADB=mariadb:10.6.11/' "$env_file"
+  else
+    echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
+  fi
+  # Generate secure passwords if missing (do not log values)
+  if ! grep -q '^DB_PASS=' "$env_file"; then
+    local dbpass
+    dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
+    echo "DB_PASS=${dbpass}" >> "$env_file"
+  fi
+  if ! grep -q '^TLS_KEYSTORE_PASS=' "$env_file"; then
+    local tlspass
+    tlspass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
+    echo "TLS_KEYSTORE_PASS=${tlspass}" >> "$env_file"
+  fi
+
+  # Avoid host port conflicts: move DB host port to 3307 (loopback binding remains)
+  if grep -q '^DB_PORT_MAPPED_HOST=' "$env_file"; then
+    sed -i 's/^DB_PORT_MAPPED_HOST=.*/DB_PORT_MAPPED_HOST=3307/' "$env_file"
+  else
+    echo 'DB_PORT_MAPPED_HOST=3307' >> "$env_file"
+  fi
+}
+
+# Fix crAPI gateway healthcheck (avoid /dev/tcp); create override with wget-based probe
+crapi_post() {
+  local dir="$BASE_DIR/crapi"
+  ensure_dir "$dir"
+  local compose_file="$dir/docker-compose.yml"
+  [[ -f "$compose_file" ]] || compose_file="$dir/docker-compose.yaml"
+  [[ -f "$compose_file" ]] || return 0
+  # Detect gateway service name in the compose (prefer image name containing "gateway")
+  local svc
+  svc=$(awk '
+    $0 ~ /^services:/ {in_s=1; next}
+    # Only treat lines with exactly two leading spaces as service headers
+    in_s && $0 ~ /^  [A-Za-z0-9_.-]+:/ {
+      svc=$1; sub(":$","",svc)
+    }
+    in_s && /image:/ && tolower($0) ~ /gateway/ {print svc; exit}
+  ' "$compose_file" 2>/dev/null || true)
+  if [[ -z "$svc" ]]; then
+    # Fallback: find service exposing 443
+    svc=$(awk '
+      $0 ~ /^services:/ {in_s=1; next}
+      # Only treat lines with exactly two leading spaces as service headers
+      in_s && $0 ~ /^  [A-Za-z0-9_.-]+:/ {svc=$1; sub(":$","",svc); in_ports=0}
+      in_s && /^[[:space:]]+ports:/ {in_ports=1; next}
+      in_s && in_ports && /443/ {print svc; exit}
+    ' "$compose_file" 2>/dev/null || true)
+  fi
+  if [[ -z "$svc" ]]; then
+    log INFO "crapi_post: could not detect gateway service; removing stale override if present"
+    rm -f "$dir/docker-compose.override.yml"
+    return 0
+  fi
+  # Sanity check service name
+  case "$svc" in image|services|ports|environment|depends_on|volumes|command|deploy|healthcheck) 
+    log INFO "crapi_post: detected invalid service name '$svc'; removing stale override"
+    rm -f "$dir/docker-compose.override.yml"
+    return 0;;
+  esac
+
+  cat >"$dir/docker-compose.override.yml" <<EOF
+services:
+  ${svc}:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1:443 2>/dev/null || busybox wget -q --spider https://127.0.0.1:443 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+EOF
+
+  # If compose contains build contexts, allow building
+  if grep -qE '^\s*build:' "$compose_file"; then
+    touch "$dir/.allow_build"
+  fi
+}
+
+# Fix WebGoat healthcheck (curl missing); use wget
+webgoat_post() {
+  local dir="$BASE_DIR/webgoat"
+  ensure_dir "$dir"
+  cat >"$dir/docker-compose.override.yml" <<'EOF'
+services:
+  webgoat:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/WebGoat/actuator/health >/dev/null 2>&1 || busybox wget -qO- http://127.0.0.1:8080/WebGoat/actuator/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+EOF
 }
 
 # Attempt to normalize Pixi port to 8084 if a compose exists
 pixi_post() {
   local dir="$BASE_DIR/pixi"
   write_env_port "$dir" PIXI_PORT 8084
-  if [[ -f "$dir/docker-compose.yml" ]]; then
-    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${PIXI_PORT:-8084}:80"/g' "$dir/docker-compose.yml" || true
+  # Support both .yml and .yaml compose filenames
+  local compose_file="$dir/docker-compose.yml"
+  if [[ ! -f "$compose_file" && -f "$dir/docker-compose.yaml" ]]; then
+    compose_file="$dir/docker-compose.yaml"
+  fi
+  if [[ -f "$compose_file" ]]; then
+    sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${PIXI_PORT:-8084}:80"/g' "$compose_file" || true
+    # Avoid Mongo host port conflicts and restrict to loopback
+    sed -E -i 's/^(\s*)-\s*"27017:27017"/\1- "127.0.0.1:${PIXI_MONGO_PORT:-27018}:27017"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"28017:28017"/\1- "127.0.0.1:${PIXI_MONGO_HTTP_PORT:-28018}:28017"/g' "$compose_file" || true
+    # Remap Pixi app host ports to avoid conflicts and bind to loopback
+    sed -E -i 's/^(\s*)-\s*"8000:8000"/\1- "127.0.0.1:${PIXI_APP_PORT:-18000}:8000"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "127.0.0.1:${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
+  fi
+  # Pixi app image is built locally; allow compose to build it
+  touch "$dir/.allow_build"
+
+  # Ensure Pixi .env has Mongo host port variables
+  local env_file="$dir/.env"
+  touch "$env_file"
+  if grep -q '^PIXI_MONGO_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_MONGO_PORT=.*/PIXI_MONGO_PORT=27018/' "$env_file"
+  else
+    echo 'PIXI_MONGO_PORT=27018' >> "$env_file"
+  fi
+  if grep -q '^PIXI_MONGO_HTTP_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_MONGO_HTTP_PORT=.*/PIXI_MONGO_HTTP_PORT=28018/' "$env_file"
+  else
+    echo 'PIXI_MONGO_HTTP_PORT=28018' >> "$env_file"
+  fi
+  if grep -q '^PIXI_APP_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_APP_PORT=.*/PIXI_APP_PORT=18000/' "$env_file"
+  else
+    echo 'PIXI_APP_PORT=18000' >> "$env_file"
+  fi
+  if grep -q '^PIXI_ADMIN_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_ADMIN_PORT=.*/PIXI_ADMIN_PORT=18090/' "$env_file"
+  else
+    echo 'PIXI_ADMIN_PORT=18090' >> "$env_file"
   fi
 }
 
 # Normalize VAmPI to host 8086; prefer container 5000 if present, else 80
 vampi_post() {
   local dir="$BASE_DIR/vampi"
-  if [[ -f "$dir/docker-compose.yml" ]]; then
+  # Support both .yml and .yaml compose filenames
+  local compose_file="$dir/docker-compose.yml"
+  if [[ ! -f "$compose_file" && -f "$dir/docker-compose.yaml" ]]; then
+    compose_file="$dir/docker-compose.yaml"
+  fi
+  if [[ -f "$compose_file" ]]; then
     write_env_port "$dir" VAMPI_PORT 8086
     # Prefer container :5000
-    if grep -qE ':5000"' "$dir/docker-compose.yml"; then
-      sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:5000\")/  - "${VAMPI_PORT:-8086}:5000"/g' "$dir/docker-compose.yml" || true
+    if grep -qE ':5000"' "$compose_file"; then
+      sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):5000"/\1- "${VAMPI_PORT:-8086}:5000"/g' "$compose_file" || true
     else
-      sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${VAMPI_PORT:-8086}:80"/g' "$dir/docker-compose.yml" || true
+      sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${VAMPI_PORT:-8086}:80"/g' "$compose_file" || true
     fi
   fi
+  # Allow building local images for VAmPI
+  touch "$dir/.allow_build"
 }
 
 # Normalize DVWS to host 8087 (container 80)
@@ -194,10 +351,16 @@ setup_xvwa() {
   local dir="$BASE_DIR/xvwa"
   ensure_dir "$dir"
   write_env_port "$dir" XVWA_PORT 8085
+  # Ensure a valid image is set via .env (default to bitnetsecdave/xvwa - v2 manifest)
+  if grep -q '^IMAGE_XVWA=' "$dir/.env" 2>/dev/null; then
+    sed -i 's/^IMAGE_XVWA=.*/IMAGE_XVWA=bitnetsecdave\/xvwa/' "$dir/.env"
+  else
+    echo 'IMAGE_XVWA=bitnetsecdave/xvwa' >> "$dir/.env"
+  fi
   cat >"$dir/docker-compose.yml" <<'EOF'
 services:
   xvwa:
-    image: s4n7h0/xvwa
+    image: ${IMAGE_XVWA}
     ports:
       - "${XVWA_PORT:-8085}:80"
     restart: unless-stopped
@@ -218,13 +381,92 @@ services:
 EOF
 }
 
+setup_dvws() {
+  local dir="$BASE_DIR/dvws"
+  ensure_dir "$dir"
+  write_env_port "$dir" DVWS_PORT 8087
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  dvws:
+    image: cyrivs89/web-dvws
+    ports:
+      - "127.0.0.1:${DVWS_PORT:-8087}:80"
+    restart: unless-stopped
+EOF
+}
+
 vapi_post() {
   local dir="$BASE_DIR/vapi"
   # Parameterize host port via env for maintainability
   write_env_port "$dir" VAPI_PORT 8000
   if [[ -f "$dir/docker-compose.yml" ]]; then
-    # Replace host port before :80 with ${VAPI_PORT:-8000}
-    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${VAPI_PORT:-8000}:80"/g' "$dir/docker-compose.yml" || true
+    # Replace host port before :80 with ${VAPI_PORT:-8000}, preserving original indentation
+    sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${VAPI_PORT:-8000}:80"/g' "$dir/docker-compose.yml" || true
+
+    # Normalize indentation of list items under any 'ports:' key to avoid YAML parse errors
+    awk '
+      function indent(s){n=match(s,/[^ ]/); return n?substr(s,1,n-1):s}
+      BEGIN{ports_indent=""; in_ports=0}
+      {
+        if ($0 ~ /^[[:space:]]*ports:[[:space:]]*$/) { ports_indent=indent($0); in_ports=1; print $0; next }
+        if (in_ports) {
+          if ($0 ~ /^[[:space:]]*-/ || $0 ~ /^[[:space:]]*#/) { printf "%s  %s\n", ports_indent, gensub(/^[[:space:]]*/, "", 1, $0); next }
+          if ($0 ~ /^[[:space:]]*$/) { print $0; next }
+          in_ports=0
+        }
+        print $0
+      }
+    ' "$dir/docker-compose.yml" > "$dir/docker-compose.yml.__tmp" && mv "$dir/docker-compose.yml.__tmp" "$dir/docker-compose.yml" || true
+  fi
+
+  # Create or populate .env with required variables per vAPI README to silence compose warnings
+  local env_file="$dir/.env"
+  if [[ ! -f "$env_file" ]]; then
+    log INFO "Creating .env for vapi"
+    # Generate a Laravel-style base64 key if possible; do not echo the value to logs
+    local genkey
+    genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
+    # Generate a strong random DB password (URL-safe base64)
+    local dbpass
+    dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
+    printf '%s\n' \
+"APP_NAME=VAPI" \
+"APP_ENV=local" \
+"APP_KEY=base64:${genkey}" \
+"APP_DEBUG=true" \
+"APP_URL=http://localhost" \
+"PUSHER_APP_KEY=" \
+"PUSHER_APP_CLUSTER=" \
+"DB_CONNECTION=mysql" \
+"DB_HOST=db" \
+"DB_PORT=3306" \
+"DB_DATABASE=vapi" \
+"DB_USERNAME=root" \
+"DB_PASSWORD=${dbpass}" \
+>> "$env_file"
+  else
+    # Ensure required keys exist; append only if missing (do not overwrite existing values)
+    grep -q '^APP_NAME='            "$env_file" || echo 'APP_NAME=VAPI' >>"$env_file"
+    grep -q '^PUSHER_APP_KEY='      "$env_file" || echo 'PUSHER_APP_KEY=' >>"$env_file"
+    grep -q '^PUSHER_APP_CLUSTER='  "$env_file" || echo 'PUSHER_APP_CLUSTER=' >>"$env_file"
+    grep -q '^APP_ENV='             "$env_file" || echo 'APP_ENV=local' >>"$env_file"
+    grep -q '^APP_DEBUG='           "$env_file" || echo 'APP_DEBUG=true' >>"$env_file"
+    grep -q '^APP_URL='             "$env_file" || echo 'APP_URL=http://localhost' >>"$env_file"
+    grep -q '^DB_CONNECTION='       "$env_file" || echo 'DB_CONNECTION=mysql' >>"$env_file"
+    grep -q '^DB_HOST='             "$env_file" || echo 'DB_HOST=db' >>"$env_file"
+    grep -q '^DB_PORT='             "$env_file" || echo 'DB_PORT=3306' >>"$env_file"
+    grep -q '^DB_DATABASE='         "$env_file" || echo 'DB_DATABASE=vapi' >>"$env_file"
+    grep -q '^DB_USERNAME='         "$env_file" || echo 'DB_USERNAME=root' >>"$env_file"
+    if ! grep -q '^DB_PASSWORD=' "$env_file"; then
+      local dbpass
+      dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
+      echo "DB_PASSWORD=${dbpass}" >>"$env_file"
+    fi
+    if ! grep -q '^APP_KEY=' "$env_file"; then
+      local genkey
+      genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
+      echo "APP_KEY=base64:${genkey}" >>"$env_file"
+    fi
   fi
 }
 
@@ -290,10 +532,14 @@ install_or_update_service() {
   fi
 
   log INFO "Pulling images and starting $name"
-  (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d)
+  if [[ -f "$dir/.allow_build" ]]; then
+    (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d)
+  else
+    (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d --no-build)
+  fi
 }
 
-start_service() { local name="$1"; (cd "$BASE_DIR/$name" && sudo $COMPOSE_CMD up -d); }
+start_service() { local name="$1"; local dir="$BASE_DIR/$name"; if [[ -f "$dir/.allow_build" ]]; then (cd "$dir" && sudo $COMPOSE_CMD up -d); else (cd "$dir" && sudo $COMPOSE_CMD up -d --no-build); fi }
 stop_service()  { local name="$1"; (cd "$BASE_DIR/$name" && sudo $COMPOSE_CMD down); }
 clean_service() {
   local name="$1"; local dir="$BASE_DIR/$name"
