@@ -35,10 +35,65 @@ SERVICES=(
   "name=vapi type=git src=https://github.com/roottusk/vapi.git expose_prompt=false post=vapi_post"
   "name=dvga type=builtin src=setup_dvga expose_prompt=true"
   "name=juice-shop type=builtin src=setup_juice_shop expose_prompt=false"
+  # Additional vulnerable apps
+  "name=webgoat type=builtin src=setup_webgoat expose_prompt=false"
+  "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
+  "name=bwapp type=builtin src=setup_bwapp expose_prompt=false"
+  "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post"
+  "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=false post=pixi_post"
+  "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
+  "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false"
+  "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
+  "name=dvws type=git src=https://github.com/stamparm/DVWS.git expose_prompt=false post=dvws_post"
 )
 
 # ---------- helpers ----------
 ensure_dir() { local d="$1"; [[ -d "$d" ]] || { log INFO "Creating $d"; mkdir -p "$d"; }; }
+write_env_port() { # write or ensure PORT env var in .env
+  local dir="$1"; local var="$2"; local val="$3";
+  grep -q "^${var}=" "$dir/.env" 2>/dev/null && sed -i "s/^${var}=.*/${var}=${val}/" "$dir/.env" || echo "${var}=${val}" >>"$dir/.env";
+}
+
+# Attempt to normalize Security Shepherd port to 8083 if a compose exists
+security_shepherd_post() {
+  local dir="$BASE_DIR/security-shepherd"
+  write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${SECURITY_SHEPHERD_PORT:-8083}:80"/g' "$dir/docker-compose.yml" || true
+  fi
+}
+
+# Attempt to normalize Pixi port to 8084 if a compose exists
+pixi_post() {
+  local dir="$BASE_DIR/pixi"
+  write_env_port "$dir" PIXI_PORT 8084
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${PIXI_PORT:-8084}:80"/g' "$dir/docker-compose.yml" || true
+  fi
+}
+
+# Normalize VAmPI to host 8086; prefer container 5000 if present, else 80
+vampi_post() {
+  local dir="$BASE_DIR/vampi"
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    write_env_port "$dir" VAMPI_PORT 8086
+    # Prefer container :5000
+    if grep -qE ':5000"' "$dir/docker-compose.yml"; then
+      sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:5000\")/  - "${VAMPI_PORT:-8086}:5000"/g' "$dir/docker-compose.yml" || true
+    else
+      sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${VAMPI_PORT:-8086}:80"/g' "$dir/docker-compose.yml" || true
+    fi
+  fi
+}
+
+# Normalize DVWS to host 8087 (container 80)
+dvws_post() {
+  local dir="$BASE_DIR/dvws"
+  write_env_port "$dir" DVWS_PORT 8087
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${DVWS_PORT:-8087}:80"/g' "$dir/docker-compose.yml" || true
+  fi
+}
 
 is_installed() { local svc="$1"; [[ -f "$BASE_DIR/$svc/docker-compose.yml" ]] || [[ -d "$BASE_DIR/$svc/.git" ]]; }
 
@@ -53,12 +108,13 @@ expose_ports_in_compose() {
 setup_juice_shop() {
   local dir="$BASE_DIR/juice-shop"
   ensure_dir "$dir"
+  write_env_port "$dir" JUICESHOP_PORT 3000
   cat >"$dir/docker-compose.yml" <<'EOF'
 services:
   juice-shop:
     image: bkimminich/juice-shop
     ports:
-      - "3000:3000"
+      - "${JUICESHOP_PORT:-3000}:3000"
     restart: unless-stopped
 EOF
 }
@@ -70,6 +126,7 @@ setup_dvga() {
     git clone -b blackhatgraphql https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git "$dir"
     sed -i 's#/opt/dvga#/opt/lab/dvga#g' "$dir/Dockerfile"
   fi
+  write_env_port "$dir" DVGA_PORT 5013
   cat >"$dir/docker-compose.yml" <<EOF
 services:
   dvga:
@@ -79,18 +136,95 @@ services:
     image: dvga
     container_name: dvga
     ports:
-      - "5013:5013"
+      - "${DVGA_PORT:-5013}:5013"
     environment:
       - WEB_HOST=127.0.0.1
     restart: unless-stopped
 EOF
 }
 
+setup_webgoat() {
+  local dir="$BASE_DIR/webgoat"
+  ensure_dir "$dir"
+  write_env_port "$dir" WEBGOAT_PORT 8080
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  webgoat:
+    image: webgoat/webgoat
+    ports:
+      - "${WEBGOAT_PORT:-8080}:8080"
+    restart: unless-stopped
+EOF
+}
+
+setup_dvwa() {
+  local dir="$BASE_DIR/dvwa"
+  ensure_dir "$dir"
+  write_env_port "$dir" DVWA_PORT 8081
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  dvwa:
+    image: vulnerables/web-dvwa
+    ports:
+      - "${DVWA_PORT:-8081}:80"
+    environment:
+      - MYSQL_USER=dvwa
+      - MYSQL_PASSWORD=dvwa
+      - MYSQL_DATABASE=dvwa
+      - MYSQL_ROOT_PASSWORD=dvwa
+    restart: unless-stopped
+EOF
+}
+
+setup_bwapp() {
+  local dir="$BASE_DIR/bwapp"
+  ensure_dir "$dir"
+  write_env_port "$dir" BWAPP_PORT 8082
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  bwapp:
+    image: raesene/bwapp
+    ports:
+      - "${BWAPP_PORT:-8082}:80"
+    restart: unless-stopped
+EOF
+}
+
+setup_xvwa() {
+  local dir="$BASE_DIR/xvwa"
+  ensure_dir "$dir"
+  write_env_port "$dir" XVWA_PORT 8085
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  xvwa:
+    image: s4n7h0/xvwa
+    ports:
+      - "${XVWA_PORT:-8085}:80"
+    restart: unless-stopped
+EOF
+}
+
+setup_mutillidae() {
+  local dir="$BASE_DIR/mutillidae"
+  ensure_dir "$dir"
+  write_env_port "$dir" MUTILLIDAE_PORT 8088
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  mutillidae:
+    image: citizenstig/nowasp
+    ports:
+      - "${MUTILLIDAE_PORT:-8088}:80"
+    restart: unless-stopped
+EOF
+}
+
 vapi_post() {
   local dir="$BASE_DIR/vapi"
-  # Some upstream compose files bind 80:80; prefer 8000:80 locally
+  # Parameterize host port via env for maintainability
+  write_env_port "$dir" VAPI_PORT 8000
   if [[ -f "$dir/docker-compose.yml" ]]; then
-    sed -i 's/\b80:80\b/8000:80/g' "$dir/docker-compose.yml" || true
+    # Replace host port before :80 with ${VAPI_PORT:-8000}
+    sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${VAPI_PORT:-8000}:80"/g' "$dir/docker-compose.yml" || true
   fi
 }
 
@@ -102,18 +236,39 @@ install_or_update_service() {
 
   case "$type" in
     compose_url)
-      if [[ ! -f "$dir/docker-compose.yml" ]]; then
+      local compose="$dir/docker-compose.yml"; local sumfile="$dir/.compose.sha256"
+      if [[ ! -f "$compose" ]]; then
         log INFO "Downloading compose for $name"
+        curl -fsSL -o "$compose" "$src"
+        sha256sum "$compose" | awk '{print $1}' >"$sumfile"
       else
-        log INFO "Updating compose for $name"
+        log INFO "Updating compose for $name (TOFU checksum)"
+        local oldsum="$(cat "$sumfile" 2>/dev/null || true)"
+        curl -fsSL -o "$compose.new" "$src"
+        local newsum="$(sha256sum "$compose.new" | awk '{print $1}')"
+        if [[ -n "$oldsum" && "$oldsum" != "$newsum" && ${ALLOW_COMPOSE_CHANGE:=false} != true ]]; then
+          log ERROR "Compose checksum changed for $name. Set ALLOW_COMPOSE_CHANGE=true to accept. Keeping existing."
+          rm -f "$compose.new"
+        else
+          mv -f "$compose.new" "$compose"; echo "$newsum" >"$sumfile"
+        fi
       fi
-      curl -fsSL -o "$dir/docker-compose.yml" "$src"
       ;;
     git)
+      local lockfile="$dir/.locked_ref"
       if [[ -d "$dir/.git" ]]; then
-        log INFO "Updating git repo for $name"; (cd "$dir" && git pull --ff-only)
+        if [[ ${ACTION:=install} == update ]]; then
+          log INFO "Updating git repo for $name"; (cd "$dir" && git fetch --all --tags --prune && git pull --ff-only)
+          (cd "$dir" && git rev-parse HEAD) >"$lockfile"
+        else
+          # Honor existing lock
+          if [[ -f "$lockfile" ]]; then
+            local ref; ref="$(cat "$lockfile")"; log INFO "Checking out locked ref $ref for $name"; (cd "$dir" && git checkout -q "$ref" || true)
+          fi
+        fi
       else
-        log INFO "Cloning $name from $src"; git clone "$src" "$dir"
+        log INFO "Cloning $name from $src"; git clone --depth 1 "$src" "$dir"
+        (cd "$dir" && git rev-parse HEAD) >"$lockfile"
       fi
       ;;
     builtin)
@@ -200,6 +355,9 @@ Services:
 
 Flags:
   --expose  Enable external exposure (0.0.0.0 host binding where applicable)
+
+Env (advanced):
+  ALLOW_COMPOSE_CHANGE=true  Accept upstream compose checksum changes (TOFU)
 EOF
 }
 
@@ -221,7 +379,7 @@ main() {
 
   case "$action" in
     install|update)
-      for_each_service install_update_wrapper "$target"
+      ACTION="$action" for_each_service install_update_wrapper "$target"
       ;;
     start)
       for_each_service start_wrapper "$target"

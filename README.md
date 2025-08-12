@@ -2,37 +2,78 @@
 
 I was tediously installing and uninstalling the tools and docker images for the APISec University course after every new start I wanted to make or reinstall of Kali. To make this a little easier I created scripts to do most of the work for me.
 
-## apisec_tool_install.sh
+## Unified vulnerable lab manager (Docker)
 
-This script installs all of the applications for the course. Although you will still need to configure the firefox proxy, add the extensions to Burp and update zaproxy. 
+Use `manage_vuln_services.sh` to install, update, start, stop, and clean multiple vulnerable apps/APIs as Docker instances under `/opt/lab/<service>/`.
 
-## manage_docker_builds.sh
+Supported services and default host ports (non-conflicting):
 
-This is an updated script for multiple hacking docker images. I wanted to have more than just the APISec University images to play with. 
+- crapi (upstream compose; commonly 8888)
+- vapi (8000:80)
+- dvga (5013:5013)
+- juice-shop (3000:3000)
+- webgoat (8080:8080)
+- dvwa (8081:80)
+- bwapp (8082:80)
+- security-shepherd (8083:80)
+- pixi (8084:80)
+- xvwa (8085:80)
+- vampi (8086:5000 preferred; fallback 8086:80)
+- dvws (8087:80)
+- mutillidae (8088:80)
 
-crapi - completely ridiculous API : Port 8888  
-vapi - Vulnerable Adversely Programmed Interface : Port 8000  
-dvga - Damn Vulnerable GraphQL Application : Port 5013  
-juice-shop - OWASP Juice Shop : Port 3000  
+### Usage
 
-This script will ***install, update, start, stop, clean*** any of these docker images. You also have the ability to allow external visibility on the docker containers. vAPI and Juice Shop and exteernally accessible by default. The script also allows for configuring dvga and crapi for external connectivity. <span style="color:red">(Warning: Probably best not to use this on an internet facing server.)</span>
+Make executable and run with sudo:
 
-## manage_crapi_vapi_builds.sh
+```bash
+chmod +x manage_vuln_services.sh
+sudo ./manage_vuln_services.sh --help
+```
 
-To help manage the docker installs this script can do the following options
+Examples:
 
-***This script is best used in an environment where other docker images do not exist. Running clean may remove unused images and volumes for any docker application installed.***
+- Install all (localhost bindings):
+```bash
+sudo ./manage_vuln_services.sh install all
+```
 
+- Install all and expose externally (applies safe host-binding changes where applicable):
+```bash
+sudo ./manage_vuln_services.sh install all --expose
+```
 
-To run this script do the following:  
-&nbsp;&nbsp;&nbsp;&nbsp;chmod +x manage_crapi_vapi_builds.sh  
-&nbsp;&nbsp;&nbsp;&nbsp;./manage_crapi_vapi_builds.sh \<option\>
+- Update all (accept upstream compose changes via TOFU):
+```bash
+sudo ALLOW_COMPOSE_CHANGE=true ./manage_vuln_services.sh update all
+```
 
-**install** - Installs both crAPI and vapi docker images and starts them.  
-**start** - To start the docker images if they are not running.  
-**stop** - Stops all docker images.  
-**restart** - Stops and starts the docker images.  
-**clean** - Will wipe everything to do with the docker images.  
+- Start/stop/clean a single service:
+```bash
+sudo ./manage_vuln_services.sh start dvga
+sudo ./manage_vuln_services.sh stop dvga
+sudo ./manage_vuln_services.sh clean dvga
+```
 
-When running the script you will be asked if you want to access this server externally. If you are running these on an external server and not your local system answer "y" otherwise is you are installing on a local maching answer "n".
+### Port customization
+
+Each service writes a `.env` with a service-specific port variable. Change the value and restart the service.
+
+Examples:
+
+- `/opt/lab/webgoat/.env` contains `WEBGOAT_PORT=8080`
+- `/opt/lab/vapi/.env` contains `VAPI_PORT=8000`
+
+### Supply-chain hardening (TOFU)
+
+- Git services (e.g., `vapi`, `security-shepherd`, `pixi`, `vampi`, `dvws`) are pinned at first install by commit (`.locked_ref`). Use `update` to refresh and re-pin.
+- Compose URL services (e.g., `crapi`) store a checksum (`.compose.sha256`). If upstream changes, set `ALLOW_COMPOSE_CHANGE=true` to accept the new compose.
+
+### Security note
+
+These apps are intentionally vulnerable. Do not expose them to the internet. Use `--expose` only in isolated lab networks.
+
+## Legacy script
+
+`apisec_tool_install.sh` installs desktop tooling (Burp, ZAP, Postman, etc.). The Docker management scripts have been consolidated into `manage_vuln_services.sh`. The previous scripts `manage_docker_builds.sh` and `manage_crapi_vapi_builds.sh` are deprecated and removed.
 
