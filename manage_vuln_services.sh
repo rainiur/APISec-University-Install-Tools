@@ -40,7 +40,7 @@ SERVICES=(
   "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
   "name=bwapp type=builtin src=setup_bwapp expose_prompt=false"
   "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post"
-  "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=false post=pixi_post"
+  "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=true post=pixi_post"
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false"
   "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
@@ -263,6 +263,10 @@ expose_ports_in_compose() {
   local compose_file="$1"
   # Replace only patterns like "- \"127.0.0.1:PORT:...\"" with 0.0.0.0
   sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*)"127\.0\.0\.1:([0-9]+:)/\10.0.0.0:\2/' "$compose_file"
+  # Also handle variable-based binds used by crAPI: "${LISTEN_IP:-127.0.0.1}:PORT:..."
+  sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*")\$\{LISTEN_IP:-127\.0\.0\.1\}:([0-9]+:)/\10.0.0.0:\2/' "$compose_file"
+  # And handle unquoted forms if present: - 127.0.0.1:PORT:...
+  sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*)127\.0\.0\.1:([0-9]+:)/\10.0.0.0:\2/' "$compose_file"
 }
 
 # ---------- built-in setups ----------
@@ -538,6 +542,23 @@ install_or_update_service() {
     if [[ -f "$dir/docker-compose.yml" ]]; then
       log INFO "Enabling external exposure for $name"
       expose_ports_in_compose "$dir/docker-compose.yml"
+      # For crAPI, also set LISTEN_IP=0.0.0.0 in .env so variable-based binds expose correctly
+      if [[ "$name" == "crapi" ]]; then
+        if grep -q '^LISTEN_IP=' "$dir/.env" 2>/dev/null; then
+          sed -i 's/^LISTEN_IP=.*/LISTEN_IP=0.0.0.0/' "$dir/.env"
+        else
+          echo 'LISTEN_IP=0.0.0.0' >>"$dir/.env"
+        fi
+      fi
+      # For Pixi, keep Mongo ports restricted to loopback for safety
+      if [[ "$name" == "pixi" ]]; then
+        # Revert any exposed host bindings for container ports 27017 and 28017 back to 127.0.0.1
+        sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*")0\.0\.0\.0:([0-9]+:)(27017\")/\1127.0.0.1:\2\3/' "$dir/docker-compose.yml" || true
+        sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*")0\.0\.0\.0:([0-9]+:)(28017\")/\1127.0.0.1:\2\3/' "$dir/docker-compose.yml" || true
+        # Unquoted variant
+        sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*)0\.0\.0\.0:([0-9]+:)(27017)/\1127.0.0.1:\2\3/' "$dir/docker-compose.yml" || true
+        sed -E -i '/ports:/,/-/ s/^([[:space:]]*-[[:space:]]*)0\.0\.0\.0:([0-9]+:)(28017)/\1127.0.0.1:\2\3/' "$dir/docker-compose.yml" || true
+      fi
     fi
   fi
 
