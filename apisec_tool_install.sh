@@ -6,13 +6,78 @@ export DEBIAN_FRONTEND=noninteractive
 log() { printf '[%(%FT%TZ)T] %s\n' -1 "$*"; }
 trap 'log "ERROR at line $LINENO"; exit 1' ERR
 
+# ------------------------------------------------------------
+# Uninstall mode (remove tools installed by this script)
+# Usage: sudo bash apisec_tool_install.sh uninstall [--force] [--purge]
+#  --force : skip confirmation
+#  --purge : also remove Docker data (/var/lib/docker) and apt repo list
+ACTION="${1:-}"
+if [[ "$ACTION" == "uninstall" ]]; then
+  shift || true
+  FORCE=false; PURGE=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) FORCE=true; shift;;
+      --purge) PURGE=true; shift;;
+      *) break;;
+    esac
+  done
+  if [[ "$FORCE" != true ]]; then
+    read -r -p "This will uninstall Docker CE, ZAP, Postman, jwt_tool, kiterunner, pipx tools, and Jython from this system. Continue? [y/N] " ans
+    [[ "$ans" =~ ^[Yy]$ ]] || { log "Uninstall aborted"; exit 1; }
+  fi
+  . /etc/os-release || true
+  log "Stopping Docker if running..."; sudo systemctl stop docker 2>/dev/null || true
+  log "Removing apt packages (Docker CE and ZAP)..."
+  sudo apt-get remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin zaproxy || true
+  # Remove distro-provided docker.io if present
+  sudo apt-get remove -y docker.io docker-cli containerd runc || true
+  # Remove Arjun via apt on Kali if present
+  if [[ "${ID:-}" == "kali" ]]; then sudo apt-get remove -y arjun || true; fi
+  log "Uninstalling pipx apps (mitmproxy2swagger, arjun) if present..."
+  pipx uninstall mitmproxy2swagger || true
+  pipx uninstall arjun || true
+  log "Removing Postman, jwt_tool, kiterunner, Jython artifacts..."
+  sudo rm -f /usr/bin/postman /usr/bin/jwt_tool /usr/bin/kr /usr/bin/zap || true
+  sudo rm -rf /opt/Postman /opt/jwt_tool /opt/kiterunner || true
+  sudo rm -f /opt/jython-standalone-2.7.3.jar || true
+  if [[ "$PURGE" == true ]]; then
+    log "Purging Docker data under /var/lib/docker (destructive)..."
+    sudo rm -rf /var/lib/docker || true
+    log "Removing Docker APT repo list..."
+    sudo rm -f /etc/apt/sources.list.d/docker.list || true
+  fi
+  log "Autoremoving unused dependencies..."
+  sudo apt-get -f install -y || true
+  sudo apt-get autoremove -y || true
+  log "Uninstall complete."
+  exit 0
+fi
+
 log "Updating system packages..."
+# Pre-clean invalid Docker repo if previously added (e.g., Ubuntu repo on Kali)
+. /etc/os-release || true
+if [[ "${ID:-}" == "kali" ]] && [[ -f /etc/apt/sources.list.d/docker.list ]] && \
+   grep -q 'download.docker.com/linux/ubuntu' /etc/apt/sources.list.d/docker.list; then
+  sudo mv /etc/apt/sources.list.d/docker.list \
+          /etc/apt/sources.list.d/docker.list.invalid.$(date +%s).bak || true
+fi
 sudo apt-get update -y
 sudo apt-get -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" dist-upgrade -y
 sudo apt-get autoremove -y
 
 log "Installing prerequisites..."
-sudo apt-get install -y git zsh make python3 python3-pip pipx firefox ca-certificates curl gnupg unzip
+sudo apt-get install -y git zsh make python3 python3-pip pipx ca-certificates curl gnupg unzip
+# Ensure Firefox is available; prefer firefox-esr on Debian/Kali. Skip if already installed.
+if ! command -v firefox >/dev/null 2>&1; then
+    if apt-cache policy firefox-esr 2>/dev/null | grep -q "Candidate:"; then
+        sudo apt-get install -y firefox-esr
+    elif apt-cache policy firefox 2>/dev/null | grep -q "Candidate:"; then
+        sudo apt-get install -y firefox
+    else
+        log "Firefox package not found in APT; it may be installed via Snap/Flatpak or already present."
+    fi
+fi
 pipx ensurepath || true
 
 if [ ! -f /opt/jython-standalone-2.7.3.jar ]; then
@@ -59,8 +124,24 @@ pipx install mitmproxy2swagger --force || true
 log "Installing Docker (official repository)..."
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+# Detect distro and set correct Docker repo (Ubuntu/Debian). Map Kali to Debian/bookworm.
+. /etc/os-release
+DOCKER_OS="ubuntu"
+DOCKER_CODENAME="$VERSION_CODENAME"
+case "$ID" in
+  ubuntu)
+    DOCKER_OS="ubuntu"; DOCKER_CODENAME="$VERSION_CODENAME";;
+  debian)
+    DOCKER_OS="debian"; DOCKER_CODENAME="$VERSION_CODENAME";;
+  kali)
+    DOCKER_OS="debian"; DOCKER_CODENAME="bookworm";;
+  *)
+    DOCKER_OS="debian"; DOCKER_CODENAME="bookworm";;
+esac
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$DOCKER_OS $DOCKER_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 sudo apt-get update -y
+# Remove potentially conflicting distro packages that ship the same plugin paths
+sudo apt-get remove -y docker-buildx docker-compose || true
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin golang-go zaproxy
 sudo usermod -aG docker "$USER" || true
 
@@ -102,6 +183,12 @@ if [ ! -f /opt/kiterunner/dist/kr ]; then
 fi
 
 if ! command -v arjun >/dev/null 2>&1; then
-    log "Installing Arjun via pipx..."
-    pipx install arjun --force || true
+    . /etc/os-release || true
+    if [[ "${ID:-}" == "kali" ]]; then
+        log "Installing Arjun via apt (Kali)..."
+        sudo apt-get install -y arjun || { log "apt install arjun failed, falling back to pipx"; pipx install arjun --force || true; }
+    else
+        log "Installing Arjun via pipx..."
+        pipx install arjun --force || true
+    fi
 fi

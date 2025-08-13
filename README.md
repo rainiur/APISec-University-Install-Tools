@@ -2,6 +2,23 @@
 
 I was tediously installing and uninstalling the tools and docker images for the APISec University course after every new start I wanted to make or reinstall of Kali. To make this a little easier I created scripts to do most of the work for me.
 
+## Order of Operations (Do this first)
+
+1) Run tooling installer to set up prerequisites (Docker CE, ZAP, Postman link, jwt_tool, kiterunner, pipx apps, etc.).
+
+```bash
+chmod +x apisec_tool_install.sh
+sudo ./apisec_tool_install.sh
+```
+
+2) Use the vulnerable lab manager to install/update/start the lab services.
+
+```bash
+chmod +x manage_vuln_services.sh
+sudo ./manage_vuln_services.sh install all
+sudo ./manage_vuln_services.sh start webgoat
+```
+
 ## Unified vulnerable lab manager (Docker)
 
 Use `manage_vuln_services.sh` to install, update, start, stop, and clean multiple vulnerable apps/APIs as Docker instances under `/opt/lab/<service>/`.
@@ -85,7 +102,14 @@ These apps are intentionally vulnerable. Do not expose them to the internet. Use
 
 ## Quickstart
 
+Recommended sequence:
+
 ```bash
+# 1) Install desktop tooling and Docker prerequisites
+chmod +x apisec_tool_install.sh
+sudo ./apisec_tool_install.sh
+
+# 2) Manage vulnerable services
 chmod +x manage_vuln_services.sh
 sudo ./manage_vuln_services.sh install all
 sudo ./manage_vuln_services.sh start webgoat
@@ -193,6 +217,16 @@ sudo ./manage_vuln_services.sh uninstall <service>
 
 - Prompts for confirmation; use `--force` to skip.
 - Removes containers, images for the project, volumes, networks, and the entire directory `/opt/lab/<service>`.
+
+## Uninstalling installed tooling
+
+To remove tools installed by `apisec_tool_install.sh`:
+
+```bash
+sudo ./apisec_tool_install.sh uninstall       # prompts for confirmation
+sudo ./apisec_tool_install.sh uninstall --force  # non-interactive
+sudo ./apisec_tool_install.sh uninstall --force --purge  # also wipes Docker data (/var/lib/docker) and removes Docker repo entry
+```
 
 ## Contributing
 
