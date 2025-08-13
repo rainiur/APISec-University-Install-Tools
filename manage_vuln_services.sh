@@ -564,7 +564,8 @@ install_or_update_service() {
 
   log INFO "Pulling images and starting $name"
   if [[ -f "$dir/.allow_build" ]]; then
-    (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d)
+    # Services with local build contexts: build first to avoid pull errors, then start
+    (cd "$dir" && sudo $COMPOSE_CMD build --pull || true; sudo $COMPOSE_CMD up -d)
   else
     (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d --no-build)
   fi
