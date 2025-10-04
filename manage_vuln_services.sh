@@ -156,7 +156,7 @@ crapi_post() {
 services:
   ${svc}:
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1:443 2>/dev/null || busybox wget -q --spider https://127.0.0.1:443 2>/dev/null || exit 1"]
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/443' || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
