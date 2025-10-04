@@ -376,9 +376,9 @@ services:
       - MYSQL_DATABASE=dvwa
       - MYSQL_ROOT_PASSWORD=dvwa
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      exec supervisord -n"
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      /main.sh"
     restart: unless-stopped
 EOF
 }
