@@ -376,8 +376,8 @@ services:
       - MYSQL_DATABASE=dvwa
       - MYSQL_ROOT_PASSWORD=dvwa
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "echo 'allow_url_include = On' > /etc/php/7.0/apache2/conf.d/99-custom.ini &&
+      echo 'allow_url_fopen = On' >> /etc/php/7.0/apache2/conf.d/99-custom.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
