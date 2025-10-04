@@ -378,7 +378,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      /main.sh"
+      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -396,7 +396,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      /main.sh"
+      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -420,7 +420,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      /main.sh"
+      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -438,7 +438,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      /main.sh"
+      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -456,7 +456,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      /main.sh"
+      apache2-foreground"
     restart: unless-stopped
 EOF
 }
