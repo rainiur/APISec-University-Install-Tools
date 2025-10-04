@@ -378,7 +378,7 @@ services:
     command: >
       bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
       sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      apache2-foreground"
+      exec supervisord -n"
     restart: unless-stopped
 EOF
 }
@@ -393,10 +393,6 @@ services:
     image: raesene/bwapp
     ports:
       - "${BWAPP_PORT:-8082}:80"
-    command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -417,10 +413,6 @@ services:
     image: ${IMAGE_XVWA}
     ports:
       - "${XVWA_PORT:-8085}:80"
-    command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -435,10 +427,6 @@ services:
     image: citizenstig/nowasp
     ports:
       - "${MUTILLIDAE_PORT:-8088}:80"
-    command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      apache2-foreground"
     restart: unless-stopped
 EOF
 }
@@ -453,10 +441,6 @@ services:
     image: cyrivs89/web-dvws
     ports:
       - "127.0.0.1:${DVWS_PORT:-8087}:80"
-    command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
-      apache2-foreground"
     restart: unless-stopped
 EOF
 }
