@@ -376,8 +376,8 @@ services:
       - MYSQL_DATABASE=dvwa
       - MYSQL_ROOT_PASSWORD=dvwa
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
@@ -394,8 +394,8 @@ services:
     ports:
       - "${BWAPP_PORT:-8082}:80"
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
@@ -418,8 +418,8 @@ services:
     ports:
       - "${XVWA_PORT:-8085}:80"
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
@@ -436,8 +436,8 @@ services:
     ports:
       - "${MUTILLIDAE_PORT:-8088}:80"
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
@@ -454,8 +454,8 @@ services:
     ports:
       - "127.0.0.1:${DVWS_PORT:-8087}:80"
     command: >
-      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php/7.0/apache2/php.ini &&
-      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php/7.0/apache2/php.ini &&
+      bash -c "sed -i 's/allow_url_include = Off/allow_url_include = On/g' /etc/php5/apache2/php.ini &&
+      sed -i 's/allow_url_fopen = Off/allow_url_fopen = On/g' /etc/php5/apache2/php.ini &&
       /main.sh"
     restart: unless-stopped
 EOF
