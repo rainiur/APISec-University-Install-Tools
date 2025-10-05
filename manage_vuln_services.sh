@@ -45,6 +45,7 @@ SERVICES=(
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false"
   "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
   "name=dvws type=builtin src=setup_dvws expose_prompt=false"
+  "name=lab-dashboard type=builtin src=setup_lab_dashboard expose_prompt=false"
 )
 
 # ---------- helpers ----------
@@ -461,6 +462,279 @@ services:
 EOF
 }
 
+setup_lab_dashboard() {
+  local dir="$BASE_DIR/lab-dashboard"
+  ensure_dir "$dir"
+  write_env_port "$dir" DASHBOARD_PORT 8089
+  
+  # Create HTML dashboard
+  cat >"$dir/index.html" <<'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Security Lab Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-left: 5px solid #667eea;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.4rem;
+        }
+        
+        .card p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        
+        .card .port {
+            background: #f8f9fa;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #495057;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        
+        .card a {
+            display: inline-block;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .card a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 30px;
+            color: white;
+            font-size: 1.1rem;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            opacity: 0.8;
+        }
+        
+        .category {
+            margin-bottom: 30px;
+        }
+        
+        .category h2 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 API Security Lab Dashboard</h1>
+            <p>Vulnerable Applications for Security Testing & Learning</p>
+        </div>
+        
+        <div class="category">
+            <h2>🚀 API Security Testing</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>crAPI</h3>
+                    <div class="port">Port: 80/443</div>
+                    <p>Completely Ridiculous API - A vulnerable API designed for learning API security concepts including authentication, authorization, and data validation vulnerabilities.</p>
+                    <a href="http://localhost" target="_blank">Access crAPI</a>
+                </div>
+                
+                <div class="card">
+                    <h3>VAmPI</h3>
+                    <div class="port">Port: 8086</div>
+                    <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
+                    <a href="http://localhost:8086" target="_blank">Access VAmPI</a>
+                </div>
+                
+                <div class="card">
+                    <h3>VAPI</h3>
+                    <div class="port">Port: 8000</div>
+                    <p>Vulnerable API - A Laravel-based vulnerable API designed for testing various security vulnerabilities in web APIs.</p>
+                    <a href="http://localhost:8000" target="_blank">Access VAPI</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="category">
+            <h2>🌐 Web Application Security</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>DVWA</h3>
+                    <div class="port">Port: 8081</div>
+                    <p>Damn Vulnerable Web Application - A PHP/MySQL web application that is deliberately vulnerable for learning web application security.</p>
+                    <a href="http://localhost:8081" target="_blank">Access DVWA</a>
+                </div>
+                
+                <div class="card">
+                    <h3>bWAPP</h3>
+                    <div class="port">Port: 8082</div>
+                    <p>Buggy Web Application - A PHP application with over 100 web vulnerabilities for learning and practicing web security.</p>
+                    <a href="http://localhost:8082" target="_blank">Access bWAPP</a>
+                </div>
+                
+                <div class="card">
+                    <h3>XVWA</h3>
+                    <div class="port">Port: 8085</div>
+                    <p>Xtreme Vulnerable Web Application - A vulnerable web application designed for learning web application security testing.</p>
+                    <a href="http://localhost:8085" target="_blank">Access XVWA</a>
+                </div>
+                
+                <div class="card">
+                    <h3>Mutillidae</h3>
+                    <div class="port">Port: 8088</div>
+                    <p>OWASP Mutillidae - A deliberately vulnerable web application with numerous vulnerabilities for learning web security.</p>
+                    <a href="http://localhost:8088" target="_blank">Access Mutillidae</a>
+                </div>
+                
+                <div class="card">
+                    <h3>DVWS</h3>
+                    <div class="port">Port: 8087</div>
+                    <p>Damn Vulnerable Web Services - A vulnerable web services application for learning web service security testing.</p>
+                    <a href="http://localhost:8087" target="_blank">Access DVWS</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="category">
+            <h2>🎯 Specialized Security Testing</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Security Shepherd</h3>
+                    <div class="port">Port: 8083/8084</div>
+                    <p>OWASP Security Shepherd - A web and mobile application security training platform with various security challenges.</p>
+                    <a href="http://localhost:8083" target="_blank">Access Security Shepherd</a>
+                </div>
+                
+                <div class="card">
+                    <h3>WebGoat</h3>
+                    <div class="port">Port: 8080</div>
+                    <p>OWASP WebGoat - A deliberately insecure web application maintained by OWASP for learning web application security.</p>
+                    <a href="http://localhost:8080" target="_blank">Access WebGoat</a>
+                </div>
+                
+                <div class="card">
+                    <h3>Juice Shop</h3>
+                    <div class="port">Port: 3000</div>
+                    <p>OWASP Juice Shop - A modern vulnerable web application written in Node.js and Angular for learning web security.</p>
+                    <a href="http://localhost:3000" target="_blank">Access Juice Shop</a>
+                </div>
+                
+                <div class="card">
+                    <h3>DVGA</h3>
+                    <div class="port">Port: 5013</div>
+                    <p>Damn Vulnerable GraphQL Application - A vulnerable GraphQL API designed for learning GraphQL security testing.</p>
+                    <a href="http://localhost:5013" target="_blank">Access DVGA</a>
+                </div>
+                
+                <div class="card">
+                    <h3>Pixi</h3>
+                    <div class="port">Port: 8084</div>
+                    <p>Pixi - A vulnerable application for learning various security concepts and attack techniques.</p>
+                    <a href="http://localhost:8084" target="_blank">Access Pixi</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status">
+            <p>🟢 All services are running and ready for security testing!</p>
+        </div>
+        
+        <div class="footer">
+            <p>🔒 API Security University Lab Environment</p>
+            <p>Use these applications responsibly for educational purposes only</p>
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+  cat >"$dir/docker-compose.yml" <<'EOF'
+services:
+  dashboard:
+    image: nginx:alpine
+    ports:
+      - "${DASHBOARD_PORT:-8089}:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    restart: unless-stopped
+EOF
+}
+
 vapi_post() {
   local dir="$BASE_DIR/vapi"
   # Parameterize host port via env for maintainability
@@ -700,7 +974,7 @@ Actions:
   uninstall Remove a SINGLE service and its data (safer alias of clean; does not allow 'all')
 
 Services:
-  crapi, vapi, dvga, juice-shop, or 'all'
+  crapi, vapi, dvga, juice-shop, webgoat, dvwa, bwapp, security-shepherd, pixi, xvwa, mutillidae, vampi, dvws, lab-dashboard, or 'all'
 
 Flags:
   --expose  Enable external exposure (0.0.0.0 host binding where applicable)
