@@ -963,35 +963,35 @@ vapi_post() {
   # Create database initialization service for vAPI
   if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-init:" "$dir/docker-compose.yml"; then
     log INFO "Adding vAPI database initialization service"
-    cat >>"$dir/docker-compose.yml" <<'EOF'
-
-  # vAPI database initialization service
-  vapi-init:
-    image: mysql:8.0
-    depends_on:
-      - db
-    environment:
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
-      - MYSQL_DATABASE=${DB_DATABASE}
-    command: >
-      sh -c "
-        echo 'Waiting for MySQL to be ready...' &&
-        until mysql -h db -u root -p${DB_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1; do sleep 2; done &&
-        echo 'MySQL is ready, checking for database schema...' &&
-        if [ -f /vapi/vapi.sql ]; then
-          echo 'Importing vapi.sql schema...' &&
-          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} < /vapi/vapi.sql &&
-          echo 'Database schema imported successfully'
-        else
-          echo 'vapi.sql not found, creating basic database structure...' &&
-          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} -e 'CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);' &&
-          echo 'Basic database structure created'
-        fi
-      "
-    volumes:
-      - .:/vapi
-    restart: "no"
-EOF
+    # Insert services before the volumes section
+    sed -i '/^volumes:/i\
+  # vAPI database initialization service\
+  vapi-init:\
+    image: mysql:8.0\
+    depends_on:\
+      - db\
+    environment:\
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}\
+      - MYSQL_DATABASE=${DB_DATABASE}\
+    command: >\
+      sh -c "\
+        echo '\''Waiting for MySQL to be ready...'\'' &&\
+        until mysql -h db -u root -p${DB_PASSWORD} -e '\''SELECT 1'\'' >/dev/null 2>&1; do sleep 2; done &&\
+        echo '\''MySQL is ready, checking for database schema...'\'' &&\
+        if [ -f /vapi/vapi.sql ]; then\
+          echo '\''Importing vapi.sql schema...'\'' &&\
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} < /vapi/vapi.sql &&\
+          echo '\''Database schema imported successfully'\''\
+        else\
+          echo '\''vapi.sql not found, creating basic database structure...'\'' &&\
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} -e '\''CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'\'' &&\
+          echo '\''Basic database structure created'\''\
+        fi\
+      "\
+    volumes:\
+      - .:/vapi\
+    restart: "no"\
+' "$dir/docker-compose.yml"
   elif [[ -f "$dir/docker-compose.yml" ]]; then
     log INFO "vAPI database initialization service already exists in compose file"
   fi
@@ -999,35 +999,35 @@ EOF
   # Create Laravel initialization service
   if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-laravel-init:" "$dir/docker-compose.yml"; then
     log INFO "Adding vAPI Laravel initialization service"
-    cat >>"$dir/docker-compose.yml" <<'EOF'
-
-  # vAPI Laravel initialization service
-  vapi-laravel-init:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - db
-      - vapi-init
-    environment:
-      - DB_HOST=db
-      - DB_DATABASE=${DB_DATABASE}
-      - DB_USERNAME=root
-      - DB_PASSWORD=${DB_PASSWORD}
-    command: >
-      sh -c "
-        echo 'Waiting for database initialization to complete...' &&
-        sleep 10 &&
-        echo 'Running Laravel migrations and seeding...' &&
-        php artisan migrate --force &&
-        php artisan db:seed --force &&
-        php artisan key:generate --force &&
-        echo 'Laravel initialization completed successfully'
-      "
-    volumes:
-      - .:/var/www/html
-    restart: "no"
-EOF
+    # Insert services before the volumes section
+    sed -i '/^volumes:/i\
+  # vAPI Laravel initialization service\
+  vapi-laravel-init:\
+    build:\
+      context: .\
+      dockerfile: Dockerfile\
+    depends_on:\
+      - db\
+      - vapi-init\
+    environment:\
+      - DB_HOST=db\
+      - DB_DATABASE=${DB_DATABASE}\
+      - DB_USERNAME=root\
+      - DB_PASSWORD=${DB_PASSWORD}\
+    command: >\
+      sh -c "\
+        echo '\''Waiting for database initialization to complete...'\'' &&\
+        sleep 10 &&\
+        echo '\''Running Laravel migrations and seeding...'\'' &&\
+        php artisan migrate --force &&\
+        php artisan db:seed --force &&\
+        php artisan key:generate --force &&\
+        echo '\''Laravel initialization completed successfully'\''\
+      "\
+    volumes:\
+      - .:/var/www/html\
+    restart: "no"\
+' "$dir/docker-compose.yml"
   elif [[ -f "$dir/docker-compose.yml" ]]; then
     log INFO "vAPI Laravel initialization service already exists in compose file"
   fi
