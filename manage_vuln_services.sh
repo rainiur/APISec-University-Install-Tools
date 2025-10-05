@@ -55,7 +55,7 @@ write_env_port() { # write or ensure PORT env var in .env
   grep -q "^${var}=" "$dir/.env" 2>/dev/null && sed -i "s/^${var}=.*/${var}=${val}/" "$dir/.env" || echo "${var}=${val}" >>"$dir/.env";
 }
 
-# Set Security Shepherd ports to 8083 (HTTP) and 8084 (HTTPS)
+# Set Security Shepherd ports to 8083 (HTTP) and 8443 (HTTPS)
 security_shepherd_post() {
   local dir="$BASE_DIR/security-shepherd"
   write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
@@ -88,7 +88,7 @@ security_shepherd_post() {
   
   # Set HTTP and HTTPS ports to fixed values
   local http_port="8083"
-  local https_port="8084"
+  local https_port="8443"
   
   if grep -q '^HTTP_PORT=' "$env_file"; then
     sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"
@@ -212,6 +212,12 @@ EOF
     sed -i 's/^TLS_ENABLED=.*/TLS_ENABLED=false/' "$env_file"
   fi
   
+  # Change HTTPS port from 8443 to 8444 to avoid conflict with Security Shepherd
+  if [[ -f "$compose_file" ]]; then
+    sed -i 's/8443:443/8444:443/' "$compose_file" || true
+    log INFO "Updated crAPI HTTPS port from 8443 to 8444 to avoid Security Shepherd conflict"
+  fi
+  
   # Mark as requiring pull instead of build
   touch "$dir/.force_pull"
   rm -f "$dir/.allow_build"
@@ -298,6 +304,30 @@ vampi_post() {
   fi
   # Allow building local images for VAmPI
   touch "$dir/.allow_build"
+  
+  # Auto-populate VAmPI database after startup
+  log INFO "Setting up VAmPI database auto-population"
+  # Create a healthcheck that also initializes the database
+  if [[ -f "$compose_file" ]]; then
+    # Add a healthcheck that initializes the database
+    cat >>"$compose_file" <<'EOF'
+
+  # VAmPI database initialization service
+  vampi-init:
+    image: curlimages/curl:latest
+    depends_on:
+      - vampi
+    command: >
+      sh -c "
+        echo 'Waiting for VAmPI to be ready...' &&
+        until curl -f http://vampi:5000/ >/dev/null 2>&1; do sleep 2; done &&
+        echo 'VAmPI is ready, initializing database...' &&
+        curl -s http://vampi:5000/createdb &&
+        echo 'Database initialized successfully'
+      "
+    restart: "no"
+EOF
+  fi
 }
 
 # Normalize DVWS to host 8087 (container 80)
@@ -613,7 +643,7 @@ setup_lab_dashboard() {
             <div class="grid">
                 <div class="card">
                     <h3>crAPI</h3>
-                    <div class="port">Port: 8888/8443</div>
+                    <div class="port">Port: 8888/8444</div>
                     <p>Completely Ridiculous API - A vulnerable API designed for learning API security concepts including authentication, authorization, and data validation vulnerabilities.</p>
                     <a href="http://${server_ip}:8888" target="_blank">Access crAPI</a>
                 </div>
@@ -622,7 +652,7 @@ setup_lab_dashboard() {
                     <h3>VAmPI</h3>
                     <div class="port">Port: 5002</div>
                     <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
-                    <a href="http://${server_ip}:5002" target="_blank">Access VAmPI</a>
+                    <a href="http://${server_ip}:5002/ui/" target="_blank">Access VAmPI Swagger UI</a>
                 </div>
                 
                 <div class="card">
@@ -679,9 +709,9 @@ setup_lab_dashboard() {
             <div class="grid">
                 <div class="card">
                     <h3>Security Shepherd</h3>
-                    <div class="port">Port: 8083/8084</div>
+                    <div class="port">Port: 8083/8443</div>
                     <p>OWASP Security Shepherd - A web and mobile application security training platform with various security challenges.</p>
-                    <a href="http://${server_ip}:8083" target="_blank">Access Security Shepherd</a>
+                    <a href="https://${server_ip}:8443" target="_blank">Access Security Shepherd (HTTPS)</a>
                 </div>
                 
                 <div class="card">
