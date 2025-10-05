@@ -335,20 +335,20 @@ vampi_post() {
     # Add a healthcheck that initializes the database
     cat >>"$compose_file" <<'EOF'
 
-  # VAmPI database initialization service
-  vampi-init:
-    image: curlimages/curl:latest
-    depends_on:
-      - vampi-vulnerable
-    command: >
-      sh -c "
-        echo 'Waiting for VAmPI to be ready...' &&
-        until curl -f http://vampi-vulnerable:5000/ >/dev/null 2>&1; do sleep 2; done &&
-        echo 'VAmPI is ready, initializing database...' &&
-        curl -s http://vampi-vulnerable:5000/createdb &&
-        echo 'Database initialized successfully'
-      "
-    restart: "no"
+ # VAmPI database initialization service
+ vampi-init:
+   image: curlimages/curl:latest
+   depends_on:
+     - vampi-vulnerable
+   command: >
+     sh -c "
+       echo 'Waiting for VAmPI to be ready...' &&
+       until curl -f http://vampi-vulnerable:5000/ >/dev/null 2>&1; do sleep 2; done &&
+       echo 'VAmPI is ready, initializing database...' &&
+       curl -s http://vampi-vulnerable:5000/createdb &&
+       echo 'Database initialized successfully'
+     "
+   restart: "no"
 EOF
   elif [[ -f "$compose_file" ]]; then
     log INFO "VAmPI database initialization service already exists in compose file"
