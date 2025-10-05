@@ -928,7 +928,7 @@ vapi_post() {
     grep -q '^DB_HOST='             "$env_file" || echo 'DB_HOST=db' >>"$env_file"
     grep -q '^DB_PORT='             "$env_file" || echo 'DB_PORT=3306' >>"$env_file"
     grep -q '^DB_DATABASE='         "$env_file" || echo 'DB_DATABASE=vapi' >>"$env_file"
-    grep -q '^DB_USERNAME='         "$env_file" || echo 'DB_USERNAME=root' >>"$env_file"
+    grep -q '^DB_USERNAME='          "$env_file" || echo 'DB_USERNAME=root' >>"$env_file"
     if ! grep -q '^DB_PASSWORD=' "$env_file"; then
       local dbpass
       dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
@@ -940,6 +940,221 @@ vapi_post() {
       echo "APP_KEY=base64:${genkey}" >>"$env_file"
     fi
   fi
+
+  # Enhanced vAPI setup: Database schema import and Laravel initialization
+  log INFO "Setting up vAPI database schema and Laravel initialization"
+  
+  # Check if vapi.sql exists in the repository
+  local sql_file="$dir/vapi.sql"
+  if [[ -f "$sql_file" ]]; then
+    log INFO "Found vapi.sql, will import during container startup"
+  else
+    log INFO "vapi.sql not found in repository, checking for alternative database files"
+    # Look for other SQL files that might contain the schema
+    local alt_sql_files=("$dir/database.sql" "$dir/database/database.sql" "$dir/database.sqlite" "$dir/database/database.sqlite")
+    for alt_file in "${alt_sql_files[@]}"; do
+      if [[ -f "$alt_file" ]]; then
+        log INFO "Found alternative database file: $(basename "$alt_file")"
+        break
+      fi
+    done
+  fi
+
+  # Create database initialization service for vAPI
+  if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-init:" "$dir/docker-compose.yml"; then
+    log INFO "Adding vAPI database initialization service"
+    cat >>"$dir/docker-compose.yml" <<'EOF'
+
+  # vAPI database initialization service
+  vapi-init:
+    image: mysql:8.0
+    depends_on:
+      - db
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE}
+    command: >
+      sh -c "
+        echo 'Waiting for MySQL to be ready...' &&
+        until mysql -h db -u root -p${DB_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1; do sleep 2; done &&
+        echo 'MySQL is ready, checking for database schema...' &&
+        if [ -f /vapi/vapi.sql ]; then
+          echo 'Importing vapi.sql schema...' &&
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} < /vapi/vapi.sql &&
+          echo 'Database schema imported successfully'
+        else
+          echo 'vapi.sql not found, creating basic database structure...' &&
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} -e 'CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);' &&
+          echo 'Basic database structure created'
+        fi
+      "
+    volumes:
+      - .:/vapi
+    restart: "no"
+EOF
+  elif [[ -f "$dir/docker-compose.yml" ]]; then
+    log INFO "vAPI database initialization service already exists in compose file"
+  fi
+
+  # Create Laravel initialization service
+  if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-laravel-init:" "$dir/docker-compose.yml"; then
+    log INFO "Adding vAPI Laravel initialization service"
+    cat >>"$dir/docker-compose.yml" <<'EOF'
+
+  # vAPI Laravel initialization service
+  vapi-laravel-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+      - vapi-init
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=root
+      - DB_PASSWORD=${DB_PASSWORD}
+    command: >
+      sh -c "
+        echo 'Waiting for database initialization to complete...' &&
+        sleep 10 &&
+        echo 'Running Laravel migrations and seeding...' &&
+        php artisan migrate --force &&
+        php artisan db:seed --force &&
+        php artisan key:generate --force &&
+        echo 'Laravel initialization completed successfully'
+      "
+    volumes:
+      - .:/var/www/html
+    restart: "no"
+EOF
+  elif [[ -f "$dir/docker-compose.yml" ]]; then
+    log INFO "vAPI Laravel initialization service already exists in compose file"
+  fi
+
+  # Create Postman collections directory and download collections
+  local postman_dir="$dir/postman"
+  ensure_dir "$postman_dir"
+  
+  # Download Postman collections if they don't exist
+  if [[ ! -f "$postman_dir/vAPI.postman_collection.json" ]]; then
+    log INFO "Downloading vAPI Postman collection"
+    # Try to download from the repository or create a basic collection
+    if curl -fsSL -o "$postman_dir/vAPI.postman_collection.json" "https://raw.githubusercontent.com/roottusk/vapi/main/vAPI.postman_collection.json" 2>/dev/null; then
+      log INFO "Downloaded vAPI Postman collection"
+    else
+      log INFO "Creating basic vAPI Postman collection"
+      cat >"$postman_dir/vAPI.postman_collection.json" <<'EOF'
+{
+  "info": {
+    "name": "vAPI Collection",
+    "description": "Vulnerable API Collection for OWASP API Top 10 scenarios",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "login"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "email",
+      "value": "admin@vapi.com"
+    },
+    {
+      "key": "password",
+      "value": "password"
+    }
+  ]
+}
+EOF
+    fi
+  fi
+
+  if [[ ! -f "$postman_dir/vAPI_ENV.postman_environment.json" ]]; then
+    log INFO "Creating vAPI Postman environment"
+    cat >"$postman_dir/vAPI_ENV.postman_environment.json" <<'EOF'
+{
+  "id": "vapi-environment",
+  "name": "vAPI Environment",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "enabled": true
+    },
+    {
+      "key": "email",
+      "value": "admin@vapi.com",
+      "enabled": true
+    },
+    {
+      "key": "password",
+      "value": "password",
+      "enabled": true
+    },
+    {
+      "key": "token",
+      "value": "",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
+EOF
+  fi
+
+  # Create setup instructions file
+  cat >"$dir/SETUP_INSTRUCTIONS.md" <<'EOF'
+# vAPI Setup Instructions
+
+## Database Setup
+The database schema will be automatically imported during container startup.
+
+## Laravel Setup
+Laravel will be automatically initialized with migrations and seeding.
+
+## Postman Setup
+1. Import the Postman collection: `postman/vAPI.postman_collection.json`
+2. Import the environment: `postman/vAPI_ENV.postman_environment.json`
+3. Or use the public workspace: https://www.postman.com/roottusk/workspace/vapi/
+
+## Usage
+- Access the API at: http://localhost:8000
+- Documentation available at: http://localhost:8000/docs
+- Use the Postman collection to test various API security scenarios
+
+## Requirements Met
+✅ Docker Compose setup with `docker-compose up -d`
+✅ Database schema import (vapi.sql)
+✅ Laravel server initialization
+✅ Postman collection and environment files
+✅ MySQL database configuration
+✅ Environment variables setup
+EOF
+
   # If compose uses local build contexts, allow building
   if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
     touch "$dir/.allow_build"

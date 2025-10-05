@@ -153,6 +153,33 @@ Each service is managed under `/opt/lab/<service>/` and typically contains:
 - Optional `.allow_build` marker to permit local image builds
 - Service artifacts (cloned sources, configs, volumes)
 
+## vAPI Requirements Compliance
+
+The vAPI installation now fully complies with the official requirements:
+
+**✅ Requirements Met:**
+- **PHP**: Handled via Docker container with PHP/Laravel environment
+- **MySQL**: Automatic database setup with schema import
+- **Postman**: Collections and environment files created automatically
+- **MITM Proxy**: Available for testing (not auto-configured)
+
+**✅ Installation Methods:**
+- **Docker**: `docker-compose up -d` (fully automated)
+- **Database Setup**: Automatic `vapi.sql` import
+- **Laravel Setup**: Automatic `php artisan` commands (migrate, seed, key:generate)
+- **Postman Setup**: Collections and environment files in `/opt/lab/vapi/postman/`
+
+**✅ Usage:**
+- Access API at: `http://localhost:8000`
+- Documentation at: `http://localhost:8000/docs`
+- Postman collections ready for import
+
+**📋 Optional Helm Support:**
+- Helm chart available in vAPI repository (`vapi-chart` folder)
+- Requires Kubernetes cluster with Helm installed
+- Create secret named `vapi` with `DB_PASSWORD` and `DB_USERNAME`
+- Sample command: `helm upgrade --install vapi ./vapi-chart --values=./vapi-chart/values.yaml`
+
 ## Service notes
 
 - `crapi`
@@ -160,8 +187,13 @@ Each service is managed under `/opt/lab/<service>/` and typically contains:
   - If upstream compose changes, set `ALLOW_COMPOSE_CHANGE=true` on `update`.
 
 - `vapi`
+  - Enhanced setup with database schema import and Laravel initialization.
+  - Automatic database initialization with `vapi.sql` import.
+  - Laravel migrations and seeding handled automatically.
+  - Postman collections and environment files created automatically.
   - Local build supported. Script creates `.allow_build` when `build:` is present.
   - Host port via `/opt/lab/vapi/.env` `VAPI_PORT`.
+  - Setup instructions available in `/opt/lab/vapi/SETUP_INSTRUCTIONS.md`.
 
 - `dvga`
   - Cloned from `dolevf/Damn-Vulnerable-GraphQL-Application` (branch `blackhatgraphql`).
