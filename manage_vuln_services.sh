@@ -608,6 +608,8 @@ setup_lab_dashboard() {
         .card .external-link {
             color: #0366d6;
             text-decoration: underline;
+            margin-top: 10px;
+            display: inline-block;
         }
         
         .card .external-link:hover {
