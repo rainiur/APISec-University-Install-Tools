@@ -613,16 +613,16 @@ setup_lab_dashboard() {
             <div class="grid">
                 <div class="card">
                     <h3>crAPI</h3>
-                    <div class="port">Port: 80/443</div>
+                    <div class="port">Port: 8888/8443</div>
                     <p>Completely Ridiculous API - A vulnerable API designed for learning API security concepts including authentication, authorization, and data validation vulnerabilities.</p>
-                    <a href="http://${server_ip}" target="_blank">Access crAPI</a>
+                    <a href="http://${server_ip}:8888" target="_blank">Access crAPI</a>
                 </div>
                 
                 <div class="card">
                     <h3>VAmPI</h3>
-                    <div class="port">Port: 8086</div>
+                    <div class="port">Port: 5002</div>
                     <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
-                    <a href="http://${server_ip}:8086" target="_blank">Access VAmPI</a>
+                    <a href="http://${server_ip}:5002" target="_blank">Access VAmPI</a>
                 </div>
                 
                 <div class="card">
@@ -707,9 +707,9 @@ setup_lab_dashboard() {
                 
                 <div class="card">
                     <h3>Pixi</h3>
-                    <div class="port">Port: 8084</div>
+                    <div class="port">Port: 18000</div>
                     <p>Pixi - A vulnerable application for learning various security concepts and attack techniques.</p>
-                    <a href="http://${server_ip}:8084" target="_blank">Access Pixi</a>
+                    <a href="http://${server_ip}:18000" target="_blank">Access Pixi</a>
                 </div>
             </div>
         </div>
