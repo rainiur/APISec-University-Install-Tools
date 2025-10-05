@@ -203,6 +203,9 @@ services:
       start_period: 60s
 EOF
 
+  # Remove obsolete version attribute to avoid Docker Compose warnings
+  sed -i '/^version:/d' "$compose_file" || true
+  
   # Force pull images instead of building to avoid schema file issues
   log INFO "Forcing pull of crAPI images to avoid build issues"
   if grep -qE '^\s*build:' "$compose_file"; then
@@ -272,6 +275,8 @@ pixi_post() {
     compose_file="$dir/docker-compose.yaml"
   fi
   if [[ -f "$compose_file" ]]; then
+    # Remove obsolete version attribute to avoid Docker Compose warnings
+    sed -i '/^version:/d' "$compose_file" || true
     sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${PIXI_PORT:-8084}:80"/g' "$compose_file" || true
     # Avoid Mongo host port conflicts and restrict to loopback
     sed -E -i 's/^(\s*)-\s*"27017:27017"/\1- "127.0.0.1:${PIXI_MONGO_PORT:-27018}:27017"/g' "$compose_file" || true
@@ -317,6 +322,8 @@ vampi_post() {
     compose_file="$dir/docker-compose.yaml"
   fi
   if [[ -f "$compose_file" ]]; then
+    # Remove obsolete version attribute to avoid Docker Compose warnings
+    sed -i '/^version:/d' "$compose_file" || true
     write_env_port "$dir" VAMPI_PORT 8086
     # Prefer container :5000
     if grep -qE ':5000"' "$compose_file"; then
@@ -360,6 +367,8 @@ dvws_post() {
   local dir="$BASE_DIR/dvws"
   write_env_port "$dir" DVWS_PORT 8087
   if [[ -f "$dir/docker-compose.yml" ]]; then
+    # Remove obsolete version attribute to avoid Docker Compose warnings
+    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
     sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${DVWS_PORT:-8087}:80"/g' "$dir/docker-compose.yml" || true
   fi
 }
@@ -844,6 +853,8 @@ vapi_post() {
   # Parameterize host port via env for maintainability
   write_env_port "$dir" VAPI_PORT 8000
   if [[ -f "$dir/docker-compose.yml" ]]; then
+    # Remove obsolete version attribute to avoid Docker Compose warnings
+    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
     # Replace host port before :80 with ${VAPI_PORT:-8000}, preserving original indentation
     sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${VAPI_PORT:-8000}:80"/g' "$dir/docker-compose.yml" || true
 
