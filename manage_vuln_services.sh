@@ -307,8 +307,8 @@ vampi_post() {
   
   # Auto-populate VAmPI database after startup
   log INFO "Setting up VAmPI database auto-population"
-  # Create a healthcheck that also initializes the database
-  if [[ -f "$compose_file" ]]; then
+  # Only add vampi-init if it doesn't already exist in the compose file
+  if [[ -f "$compose_file" ]] && ! grep -q "^[[:space:]]*vampi-init:" "$compose_file"; then
     # Add a healthcheck that initializes the database
     cat >>"$compose_file" <<'EOF'
 
@@ -327,6 +327,8 @@ vampi_post() {
       "
     restart: "no"
 EOF
+  elif [[ -f "$compose_file" ]]; then
+    log INFO "VAmPI database initialization service already exists in compose file"
   fi
 }
 
@@ -440,7 +442,28 @@ services:
     image: raesene/bwapp
     ports:
       - "${BWAPP_PORT:-8082}:80"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_DATABASE=bWAPP
+      - MYSQL_USER=bwapp
+      - MYSQL_PASSWORD=bwapp
+    depends_on:
+      - mysql
     restart: unless-stopped
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=bWAPP
+      - MYSQL_USER=bwapp
+      - MYSQL_PASSWORD=bwapp
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
 EOF
 }
 
@@ -675,6 +698,14 @@ setup_lab_dashboard() {
                     <a href="http://${server_ip}:8000" target="_blank" class="access-btn">Access VAPI</a>
                     <br><a href="https://github.com/roottusk/vapi" target="_blank" class="external-link">GitHub</a>
                 </div>
+                
+                <div class="card">
+                    <h3>DVGA</h3>
+                    <div class="port">Port: 5013</div>
+                    <p>Damn Vulnerable GraphQL Application - A vulnerable GraphQL API designed for learning GraphQL security testing.</p>
+                    <a href="http://${server_ip}:5013" target="_blank" class="access-btn">Access DVGA</a>
+                    <br><a href="https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application" target="_blank" class="external-link">GitHub</a>
+                </div>
             </div>
         </div>
         
@@ -701,7 +732,7 @@ setup_lab_dashboard() {
                     <h3>XVWA</h3>
                     <div class="port">Port: 8085</div>
                     <p>Xtreme Vulnerable Web Application - A vulnerable web application designed for learning web application security testing.</p>
-                    <a href="http://${server_ip}:8085" target="_blank" class="access-btn">Access XVWA</a>
+                    <a href="http://${server_ip}:8085/xvwa" target="_blank" class="access-btn">Access XVWA</a>
                     <br><a href="https://hub.docker.com/r/bitnetsecdave/xvwa" target="_blank" class="external-link">Docker Hub</a>
                 </div>
                 
@@ -748,14 +779,6 @@ setup_lab_dashboard() {
                     <p>OWASP Juice Shop - A modern vulnerable web application written in Node.js and Angular for learning web security.</p>
                     <a href="http://${server_ip}:3000" target="_blank" class="access-btn">Access Juice Shop</a>
                     <br><a href="https://github.com/juice-shop/juice-shop" target="_blank" class="external-link">GitHub</a>
-                </div>
-                
-                <div class="card">
-                    <h3>DVGA</h3>
-                    <div class="port">Port: 5013</div>
-                    <p>Damn Vulnerable GraphQL Application - A vulnerable GraphQL API designed for learning GraphQL security testing.</p>
-                    <a href="http://${server_ip}:5013" target="_blank" class="access-btn">Access DVGA</a>
-                    <br><a href="https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
                 <div class="card">
