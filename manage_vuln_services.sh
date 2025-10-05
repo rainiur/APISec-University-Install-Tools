@@ -84,6 +84,22 @@ security_shepherd_post() {
   else
     echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
   fi
+  
+  # Set HTTP and HTTPS ports based on SECURITY_SHEPHERD_PORT
+  local http_port="${SECURITY_SHEPHERD_PORT:-8083}"
+  local https_port="$((http_port + 1))"
+  
+  if grep -q '^HTTP_PORT=' "$env_file"; then
+    sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"
+  else
+    echo "HTTP_PORT=${http_port}" >> "$env_file"
+  fi
+  
+  if grep -q '^HTTPS_PORT=' "$env_file"; then
+    sed -i "s/^HTTPS_PORT=.*/HTTPS_PORT=${https_port}/" "$env_file"
+  else
+    echo "HTTPS_PORT=${https_port}" >> "$env_file"
+  fi
   # Generate secure passwords if missing (do not log values)
   if ! grep -q '^DB_PASS=' "$env_file"; then
     local dbpass
