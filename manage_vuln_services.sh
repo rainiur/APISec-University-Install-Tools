@@ -465,7 +465,7 @@ EOF
 setup_lab_dashboard() {
   local dir="$BASE_DIR/lab-dashboard"
   ensure_dir "$dir"
-  write_env_port "$dir" DASHBOARD_PORT 8089
+  write_env_port "$dir" DASHBOARD_PORT 80
   
   # Create HTML dashboard
   cat >"$dir/index.html" <<'EOF'
