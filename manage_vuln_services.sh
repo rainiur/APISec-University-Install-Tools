@@ -54,7 +54,7 @@ write_env_port() { # write or ensure PORT env var in .env
   grep -q "^${var}=" "$dir/.env" 2>/dev/null && sed -i "s/^${var}=.*/${var}=${val}/" "$dir/.env" || echo "${var}=${val}" >>"$dir/.env";
 }
 
-# Attempt to normalize Security Shepherd port to 8083 if a compose exists
+# Set Security Shepherd ports to 8083 (HTTP) and 8084 (HTTPS)
 security_shepherd_post() {
   local dir="$BASE_DIR/security-shepherd"
   write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
@@ -85,9 +85,9 @@ security_shepherd_post() {
     echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
   fi
   
-  # Set HTTP and HTTPS ports based on SECURITY_SHEPHERD_PORT
-  local http_port="${SECURITY_SHEPHERD_PORT:-8083}"
-  local https_port="$((http_port + 1))"
+  # Set HTTP and HTTPS ports to fixed values
+  local http_port="8083"
+  local https_port="8084"
   
   if grep -q '^HTTP_PORT=' "$env_file"; then
     sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"
