@@ -648,12 +648,12 @@ setup_lab_dashboard() {
                     <a href="http://${server_ip}:8888" target="_blank">Access crAPI</a>
                 </div>
                 
-                <div class="card">
-                    <h3>VAmPI</h3>
-                    <div class="port">Port: 5002</div>
-                    <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
-                    <a href="http://${server_ip}:5002/ui/" target="_blank">Access VAmPI Swagger UI</a>
-                </div>
+                 <div class="card">
+                     <h3>VAmPI</h3>
+                     <div class="port">Port: 8086</div>
+                     <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
+                     <a href="http://${server_ip}:8086/ui/" target="_blank">Access VAmPI Swagger UI</a>
+                 </div>
                 
                 <div class="card">
                     <h3>VAPI</h3>
@@ -757,12 +757,12 @@ setup_lab_dashboard() {
 </html>
 EOF
 
-  cat >"$dir/docker-compose.yml" <<'EOF'
+   cat >"$dir/docker-compose.yml" <<'EOF'
 services:
   dashboard:
     image: nginx:alpine
     ports:
-      - "${DASHBOARD_PORT:-8089}:80"
+      - "${DASHBOARD_PORT:-80}:80"
     volumes:
       - ./index.html:/usr/share/nginx/html/index.html:ro
     restart: unless-stopped
