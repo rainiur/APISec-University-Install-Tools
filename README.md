@@ -33,11 +33,12 @@ Supported services and default host ports (non-conflicting):
 - dvwa (8081:80)
 - bwapp (8082:80)
 - security-shepherd (8083:80)
-- pixi (8084:80)
+- pixi (18000:8000, 18090:8090, 27018:27017, 28018:28017)
 - xvwa (8085:80)
 - vampi (8086:5000 preferred; fallback 8086:80)
 - dvws (8087:80)
 - mutillidae (8088:80)
+- lab-dashboard (80:80)
 
 ### Usage
 
@@ -93,6 +94,18 @@ These apps are intentionally vulnerable. Do not expose them to the internet. Use
 ## Legacy script
 
 `apisec_tool_install.sh` installs desktop tooling (Burp, ZAP, Postman, etc.). The Docker management scripts have been consolidated into `manage_vuln_services.sh`. The previous scripts `manage_docker_builds.sh` and `manage_crapi_vapi_builds.sh` are deprecated and removed.
+
+## Lab Dashboard
+
+The `lab-dashboard` service provides a web interface to access all vulnerable applications:
+
+- **Categorized Services**: API Security, Web Application Security, Specialized Security Testing
+- **Direct Access Links**: One-click access to each service
+- **External Resources**: GitHub repositories, project websites, Docker Hub links
+- **Service Information**: Port numbers and descriptions for each application
+- **Responsive Design**: Modern, mobile-friendly interface
+
+Access the dashboard at `http://<server-ip>:80` after installing the `lab-dashboard` service.
 
 ## Prerequisites
 
@@ -159,6 +172,26 @@ Each service is managed under `/opt/lab/<service>/` and typically contains:
 
 - `juice-shop`
   - Runs official image `bkimminich/juice-shop`. Default port `JUICESHOP_PORT=3000`.
+
+- `bwapp`
+  - Includes MySQL 5.7 database service with persistent storage.
+  - Database auto-configured with proper credentials.
+  - Default port `BWAPP_PORT=8082`.
+
+- `vampi`
+  - Includes database initialization service for auto-population.
+  - Prevents duplicate service conflicts in docker-compose.
+  - Default port `VAMPI_PORT=8086`.
+
+- `pixi`
+  - Multiple port mappings: app (18000), admin (18090), MongoDB (27018), MongoDB HTTP (28018).
+  - MongoDB ports restricted to loopback for security.
+  - Default ports via `PIXI_APP_PORT`, `PIXI_ADMIN_PORT`, `PIXI_MONGO_PORT`, `PIXI_MONGO_HTTP_PORT`.
+
+- `lab-dashboard`
+  - Web dashboard with categorized service links and GitHub integration.
+  - Includes external links (GitHub, Website, Docker Hub) for each service.
+  - Default port `DASHBOARD_PORT=80`.
 
 ## Healthchecks
 
