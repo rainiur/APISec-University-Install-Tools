@@ -110,6 +110,7 @@ Access the dashboard at `http://<server-ip>:80` after installing the `lab-dashbo
 ## Prerequisites
 
 - Docker Engine + Docker Compose plugin
+- Maven (automatically installed by the script)
 - Linux host with sudo
 - Internet access for first-time pulls/clones
 
@@ -188,6 +189,12 @@ Each service is managed under `/opt/lab/<service>/` and typically contains:
   - MongoDB ports restricted to loopback for security.
   - Default ports via `PIXI_APP_PORT`, `PIXI_ADMIN_PORT`, `PIXI_MONGO_PORT`, `PIXI_MONGO_HTTP_PORT`.
 
+- `security-shepherd`
+  - Requires Maven build to generate target/ directory files before Docker build.
+  - Script automatically runs `mvn clean compile` during installation.
+  - Removes obsolete `version` attribute from docker-compose.yml.
+  - Default port `SECURITY_SHEPHERD_PORT=8083`.
+
 - `lab-dashboard`
   - Web dashboard with categorized service links and GitHub integration.
   - Includes external links (GitHub, Website, Docker Hub) for each service.
@@ -220,6 +227,13 @@ Each service is managed under `/opt/lab/<service>/` and typically contains:
 
 - __WebGoat healthcheck failing (curl missing)__
   - Fix: The script now adds a wget-based check via override. Run `update webgoat` then `start webgoat`.
+
+- __Security Shepherd build failing (target/ files not found)__
+  - Cause: Security Shepherd requires Maven build to generate target/ directory files before Docker build.
+  - Fix: The script automatically installs Maven and runs `mvn clean compile`. If issues persist, run `update security-shepherd` to retry the build.
+
+- __Security Shepherd docker-compose version warning__
+  - Fix: The script automatically removes the obsolete `version` attribute from docker-compose.yml.
 
 - __YAML parse/port conflicts__
   - Fix: Ports normalized and parameterized; adjust port in the service `.env` and restart.

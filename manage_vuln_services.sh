@@ -59,7 +59,10 @@ write_env_port() { # write or ensure PORT env var in .env
 security_shepherd_post() {
   local dir="$BASE_DIR/security-shepherd"
   write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
+  
+  # Remove obsolete version attribute from docker-compose.yml
   if [[ -f "$dir/docker-compose.yml" ]]; then
+    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
     sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${SECURITY_SHEPHERD_PORT:-8083}:80"/g' "$dir/docker-compose.yml" || true
 
     # Replace non-existent OWASP images with official images
@@ -119,6 +122,26 @@ security_shepherd_post() {
   else
     echo 'DB_PORT_MAPPED_HOST=3307' >> "$env_file"
   fi
+  
+  # Security Shepherd requires Maven build to generate target/ files before Docker build
+  log INFO "Building Security Shepherd with Maven to generate required files"
+  cd "$dir" || return 1
+  
+  # Check if Maven is available
+  if ! command -v mvn >/dev/null 2>&1; then
+    log ERROR "Maven is required but not installed. Please install Maven to build Security Shepherd."
+    return 1
+  fi
+  
+  # Run Maven build to generate target/ directory with required files
+  log INFO "Running Maven build to generate target/ directory files"
+  if mvn clean compile -q; then
+    log INFO "Maven build completed successfully"
+  else
+    log ERROR "Maven build failed. Security Shepherd requires a successful Maven build before Docker build."
+    return 1
+  fi
+  
   # If compose uses local build contexts, allow building
   if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
     touch "$dir/.allow_build"
@@ -316,13 +339,13 @@ vampi_post() {
   vampi-init:
     image: curlimages/curl:latest
     depends_on:
-      - vampi
+      - vampi-vulnerable
     command: >
       sh -c "
         echo 'Waiting for VAmPI to be ready...' &&
-        until curl -f http://vampi:5000/ >/dev/null 2>&1; do sleep 2; done &&
+        until curl -f http://vampi-vulnerable:5000/ >/dev/null 2>&1; do sleep 2; done &&
         echo 'VAmPI is ready, initializing database...' &&
-        curl -s http://vampi:5000/createdb &&
+        curl -s http://vampi-vulnerable:5000/createdb &&
         echo 'Database initialized successfully'
       "
     restart: "no"
@@ -1039,6 +1062,14 @@ ensure_docker() {
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -yq
     apt-get install -yq docker.io docker-compose || true
+  fi
+  
+  # Install Maven for Security Shepherd and other Java-based services
+  if ! command -v mvn >/dev/null 2>&1; then
+    log INFO "Installing Maven for Java-based services"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -yq
+    apt-get install -yq maven || true
   fi
 }
 
