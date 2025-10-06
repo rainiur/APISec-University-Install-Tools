@@ -707,6 +707,25 @@ mutillidae_post() {
   log INFO "Waiting for Mutillidae services to be ready..."
   sleep 10
   
+  # Wait for the database to be ready first
+  log INFO "Waiting for Mutillidae database to be ready..."
+  local db_attempt=1
+  local max_db_attempts=30
+  while [[ $db_attempt -le $max_db_attempts ]]; do
+    if (cd "$dir" && docker compose exec database mariadb -u root -pmutillidae -e "SELECT 1" >/dev/null 2>&1); then
+      log INFO "Mutillidae database is ready"
+      break
+    fi
+    log INFO "Waiting for Mutillidae database... (attempt $db_attempt/$max_db_attempts)"
+    sleep 5
+    ((db_attempt++))
+  done
+  
+  if [[ $db_attempt -gt $max_db_attempts ]]; then
+    log WARN "Mutillidae database did not become ready in time"
+    return 1
+  fi
+  
   # Wait for the web service to be ready
   local max_attempts=30
   local attempt=1
