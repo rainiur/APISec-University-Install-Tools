@@ -699,6 +699,49 @@ EOF
   write_env_port "$dir" MUTILLIDAE_LDAP_ADMIN_PORT 8090
 }
 
+# Post-setup function for Mutillidae to initialize database
+mutillidae_post() {
+  local dir="$BASE_DIR/mutillidae"
+  local port="${MUTILLIDAE_PORT:-8088}"
+  
+  log INFO "Waiting for Mutillidae services to be ready..."
+  sleep 10
+  
+  # Wait for the web service to be ready
+  local max_attempts=30
+  local attempt=1
+  while [[ $attempt -le $max_attempts ]]; do
+    if curl -s -f "http://localhost:$port/" >/dev/null 2>&1; then
+      log INFO "Mutillidae web service is ready"
+      break
+    fi
+    log INFO "Waiting for Mutillidae web service... (attempt $attempt/$max_attempts)"
+    sleep 5
+    ((attempt++))
+  done
+  
+  if [[ $attempt -gt $max_attempts ]]; then
+    log WARN "Mutillidae web service did not become ready in time"
+    return 1
+  fi
+  
+  # Fix LDAP hostname configuration (directory -> ldap)
+  log INFO "Fixing Mutillidae LDAP hostname configuration..."
+  if docker compose exec www sed -i "s/'directory'/'ldap'/g" /var/www/mutillidae/includes/ldap-config.inc 2>/dev/null; then
+    log INFO "LDAP hostname configuration updated successfully"
+  else
+    log WARN "Failed to update LDAP hostname configuration - may need manual fix"
+  fi
+  
+  # Initialize the database
+  log INFO "Setting up Mutillidae database..."
+  if curl -s "http://localhost:$port/set-up-database.php" | grep -q "Database reset successful"; then
+    log INFO "Mutillidae database setup completed successfully"
+  else
+    log WARN "Mutillidae database setup may have failed - check manually"
+  fi
+}
+
 setup_dvws() {
   local dir="$BASE_DIR/dvws"
   ensure_dir "$dir"
@@ -1502,6 +1545,11 @@ start_service() {
     (cd "$dir" && sudo $COMPOSE_CMD up -d)
   else
     (cd "$dir" && sudo $COMPOSE_CMD up -d --no-build)
+  fi
+  
+  # Special handling for Mutillidae database setup
+  if [[ "$name" == "mutillidae" ]]; then
+    mutillidae_post
   fi
 }
 stop_service()  { local name="$1"; (cd "$BASE_DIR/$name" && sudo $COMPOSE_CMD down); }
