@@ -42,7 +42,7 @@ SERVICES=(
   "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post"
   "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=true post=pixi_post"
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
-  "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false"
+  "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false post=mutillidae_post"
   "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
   "name=dvws type=builtin src=setup_dvws expose_prompt=false"
   "name=lab-dashboard type=builtin src=setup_lab_dashboard expose_prompt=false"
@@ -727,7 +727,7 @@ mutillidae_post() {
   
   # Fix LDAP hostname configuration (directory -> ldap)
   log INFO "Fixing Mutillidae LDAP hostname configuration..."
-  if docker compose exec www sed -i "s/'directory'/'ldap'/g" /var/www/mutillidae/includes/ldap-config.inc 2>/dev/null; then
+  if (cd "$dir" && docker compose exec www sed -i "s/'directory'/'ldap'/g" /var/www/mutillidae/includes/ldap-config.inc 2>/dev/null); then
     log INFO "LDAP hostname configuration updated successfully"
   else
     log WARN "Failed to update LDAP hostname configuration - may need manual fix"
@@ -735,10 +735,13 @@ mutillidae_post() {
   
   # Initialize the database
   log INFO "Setting up Mutillidae database..."
-  if curl -s "http://localhost:$port/set-up-database.php" | grep -q "Database reset successful"; then
+  local db_setup_response
+  db_setup_response=$(curl -s "http://localhost:$port/set-up-database.php")
+  if echo "$db_setup_response" | grep -q "Database reset successful\|Successfully created.*table\|Successfully inserted data"; then
     log INFO "Mutillidae database setup completed successfully"
   else
     log WARN "Mutillidae database setup may have failed - check manually"
+    log DEBUG "Database setup response: $db_setup_response"
   fi
 }
 
@@ -1496,9 +1499,6 @@ install_or_update_service() {
     *) log ERROR "Unknown service type: $type"; exit 1;;
   esac
 
-  # Optional post-setup tweaks
-  if [[ -n "$post" ]]; then "$post"; fi
-
   # Optional exposure prompt
   if [[ "$expose_prompt" == "true" && ${EXPOSE:=false} == true ]]; then
     if [[ -f "$dir/docker-compose.yml" ]]; then
@@ -1535,6 +1535,9 @@ install_or_update_service() {
   else
     (cd "$dir" && sudo $COMPOSE_CMD pull || true; sudo $COMPOSE_CMD up -d --no-build)
   fi
+
+  # Optional post-setup tweaks (after containers are started)
+  if [[ -n "$post" ]]; then "$post"; fi
 }
 
 start_service() { 
@@ -1545,11 +1548,6 @@ start_service() {
     (cd "$dir" && sudo $COMPOSE_CMD up -d)
   else
     (cd "$dir" && sudo $COMPOSE_CMD up -d --no-build)
-  fi
-  
-  # Special handling for Mutillidae database setup
-  if [[ "$name" == "mutillidae" ]]; then
-    mutillidae_post
   fi
 }
 stop_service()  { local name="$1"; (cd "$BASE_DIR/$name" && sudo $COMPOSE_CMD down); }
