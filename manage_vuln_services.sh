@@ -52,6 +52,7 @@ SERVICES=(
 ensure_dir() { local d="$1"; [[ -d "$d" ]] || { log INFO "Creating $d"; mkdir -p "$d"; }; }
 write_env_port() { # write or ensure PORT env var in .env
   local dir="$1"; local var="$2"; local val="$3";
+  ensure_dir "$dir"
   grep -q "^${var}=" "$dir/.env" 2>/dev/null && sed -i "s/^${var}=.*/${var}=${val}/" "$dir/.env" || echo "${var}=${val}" >>"$dir/.env";
 }
 
@@ -245,6 +246,7 @@ EOF
   fi
   
   # Mark as requiring pull instead of build
+  ensure_dir "$dir"
   touch "$dir/.force_pull"
   rm -f "$dir/.allow_build"
 }
@@ -286,6 +288,7 @@ pixi_post() {
     sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "127.0.0.1:${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
   fi
   # Pixi app image is built locally; allow compose to build it
+  ensure_dir "$dir"
   touch "$dir/.allow_build"
 
   # Ensure Pixi .env has Mongo host port variables
@@ -350,6 +353,7 @@ vampi_post() {
     fi
   fi
   # Allow building local images for VAmPI
+  ensure_dir "$dir"
   touch "$dir/.allow_build"
   
   # Auto-populate VAmPI database after startup
@@ -437,7 +441,7 @@ services:
     ports:
       - "${DVGA_PORT:-5013}:5013"
     environment:
-      - WEB_HOST=127.0.0.1
+      - WEB_HOST=0.0.0.0
     restart: unless-stopped
 EOF
   # Allow docker compose to build the local image rather than trying to pull a non-existent 'dvga:latest'
@@ -485,35 +489,105 @@ setup_bwapp() {
   local dir="$BASE_DIR/bwapp"
   ensure_dir "$dir"
   write_env_port "$dir" BWAPP_PORT 8082
+  
+  # Create Dockerfile that extends hackersploit/bwapp-docker
+  cat >"$dir/Dockerfile" <<'EOF'
+FROM hackersploit/bwapp-docker
+
+# Create startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Override the default command
+CMD ["/start.sh"]
+EOF
+
+  # Create startup script
+  cat >"$dir/start.sh" <<'EOF'
+#!/bin/bash
+
+# Start the original bWAPP services
+echo "Starting bWAPP services..."
+/run.sh &
+
+# Wait for services to be ready
+echo "Waiting for services to be ready..."
+sleep 60
+
+# Try to install bWAPP database schema multiple times
+echo "Installing bWAPP database schema..."
+INSTALL_SUCCESS=false
+for i in {1..5}; do
+    echo "Attempt $i/5..."
+    if curl -s "http://localhost/install.php?install=yes" >/dev/null 2>&1; then
+        echo "Database installation successful!"
+        INSTALL_SUCCESS=true
+        break
+    else
+        echo "Database installation failed, retrying in 10 seconds..."
+        sleep 10
+    fi
+done
+
+# If automatic installation failed, use manual fallback
+if [ "$INSTALL_SUCCESS" = false ]; then
+    echo "Automatic installation failed, using manual fallback..."
+    
+    # Wait for MySQL to be fully ready
+    echo "Waiting for MySQL to be ready..."
+    sleep 30
+    
+    # Create database if it doesn't exist
+    echo "Creating bWAPP database..."
+    mysql -u root -e "CREATE DATABASE IF NOT EXISTS bWAPP;" 2>/dev/null || echo "Database creation may have failed"
+    
+    # Create tables manually
+    echo "Creating database tables..."
+    mysql -u root -e "
+    USE bWAPP;
+    CREATE TABLE IF NOT EXISTS users (id int(10) NOT NULL AUTO_INCREMENT,login varchar(100) DEFAULT NULL,password varchar(100) DEFAULT NULL,email varchar(100) DEFAULT NULL,secret varchar(100) DEFAULT NULL,activation_code varchar(100) DEFAULT NULL,activated tinyint(1) DEFAULT '0',reset_code varchar(100) DEFAULT NULL,admin tinyint(1) DEFAULT '0',PRIMARY KEY (id)) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+    INSERT IGNORE INTO users (login, password, email, secret, activation_code, activated, reset_code, admin) VALUES ('A.I.M.', '6885858486f31043e5839c735d99457f045affd0', 'bwapp-aim@mailinator.com', 'A.I.M. or Authentication Is Missing', NULL, 1, NULL, 1),('bee', '6885858486f31043e5839c735d99457f045affd0', 'bwapp-bee@mailinator.com', 'Any bugs?', NULL, 1, NULL, 1);
+    CREATE TABLE IF NOT EXISTS blog (id int(10) NOT NULL AUTO_INCREMENT,owner varchar(100) DEFAULT NULL,entry varchar(500) DEFAULT NULL,date datetime DEFAULT NULL,PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+    CREATE TABLE IF NOT EXISTS visitors (id int(10) NOT NULL AUTO_INCREMENT,ip_address varchar(50) DEFAULT NULL,user_agent varchar(500) DEFAULT NULL,date datetime DEFAULT NULL,PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+    CREATE TABLE IF NOT EXISTS movies (id int(10) NOT NULL AUTO_INCREMENT,title varchar(100) DEFAULT NULL,release_year varchar(100) DEFAULT NULL,genre varchar(100) DEFAULT NULL,main_character varchar(100) DEFAULT NULL,imdb varchar(100) DEFAULT NULL,tickets_stock int(10) DEFAULT NULL,PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+    INSERT IGNORE INTO movies (title, release_year, genre, main_character, imdb, tickets_stock) VALUES ('G.I. Joe: Retaliation', '2013', 'action', 'Cobra Commander', 'tt1583421', 100),('Iron Man', '2008', 'action', 'Tony Stark', 'tt0371746', 53),('Man of Steel', '2013', 'action', 'Clark Kent', 'tt0770828', 78),('Terminator Salvation', '2009', 'sci-fi', 'John Connor', 'tt0438488', 100),('The Amazing Spider-Man', '2012', 'action', 'Peter Parker', 'tt0948470', 13),('The Cabin in the Woods', '2011', 'horror', 'Some zombies', 'tt1259521', 666),('The Dark Knight Rises', '2012', 'action', 'Bruce Wayne', 'tt1345836', 3);
+    CREATE TABLE IF NOT EXISTS heroes (id int(10) NOT NULL AUTO_INCREMENT,login varchar(100) DEFAULT NULL,password varchar(100) DEFAULT NULL,secret varchar(100) DEFAULT NULL,PRIMARY KEY (id)) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+    INSERT IGNORE INTO heroes (login, password, secret) VALUES ('neo', 'trinity', 'Oh why didn\'t I took that BLACK pill?'),('alice', 'loveZombies', 'There\'s a cure!'),('thor', 'Asgard', 'Oh, no... this is Earth... isn\'t it?'),('wolverine', 'Log@N', 'What\'s a Magneto?'),('johnny', 'm3ph1st0ph3l3s', 'I\'m the Ghost Rider!'),('seline', 'm00n', 'It wasn\'t the Lycans. It was you.');
+    " 2>/dev/null || echo "Manual database creation may have failed"
+    
+    echo "Manual database installation completed!"
+fi
+
+# Wait a moment for database installation to complete
+sleep 10
+
+echo "bWAPP is ready! Access at http://localhost"
+echo "Default credentials: bee / bug"
+
+# Keep the original services running
+wait
+EOF
+
+  # Create docker-compose.yml
   cat >"$dir/docker-compose.yml" <<'EOF'
 services:
   bwapp:
-    image: raesene/bwapp
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "${BWAPP_PORT:-8082}:80"
-    environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_DATABASE=bWAPP
-      - MYSQL_USER=bwapp
-      - MYSQL_PASSWORD=bwapp
-    depends_on:
-      - mysql
     restart: unless-stopped
-
-  mysql:
-    image: mysql:5.7
-    environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=bWAPP
-      - MYSQL_USER=bwapp
-      - MYSQL_PASSWORD=bwapp
     volumes:
-      - mysql_data:/var/lib/mysql
-    restart: unless-stopped
+      - bwapp_data:/var/lib/mysql
 
 volumes:
-  mysql_data:
+  bwapp_data:
 EOF
+
+  # Allow docker compose to build the local image
+  ensure_dir "$dir"
+  touch "$dir/.allow_build"
 }
 
 setup_xvwa() {
@@ -540,14 +614,89 @@ setup_mutillidae() {
   local dir="$BASE_DIR/mutillidae"
   ensure_dir "$dir"
   write_env_port "$dir" MUTILLIDAE_PORT 8088
-  cat >"$dir/docker-compose.yml" <<'EOF'
+  
+  # Clone the official mutillidae-docker repository
+  if [[ ! -d "$dir/mutillidae-docker" ]]; then
+    log INFO "Cloning official mutillidae-docker repository"
+    git clone https://github.com/webpwnized/mutillidae-docker.git "$dir/mutillidae-docker"
+  fi
+  
+  # Create a custom docker-compose.yml that uses the official setup but with custom ports
+  cat >"$dir/docker-compose.yml" <<EOF
 services:
-  mutillidae:
-    image: citizenstig/nowasp
-    ports:
-      - "${MUTILLIDAE_PORT:-8088}:80"
+  # Database Service
+  database:
+    container_name: mutillidae-database
+    image: webpwnized/mutillidae:database
+    networks:
+      - datanet
     restart: unless-stopped
+
+  # Web Application (Mutillidae)
+  www:
+    container_name: mutillidae-www
+    depends_on:
+      - database
+    image: webpwnized/mutillidae:www
+    ports:
+      - "\${MUTILLIDAE_PORT:-8088}:80"
+      - "\${MUTILLIDAE_HTTPS_PORT:-8445}:443"
+    networks:
+      - datanet
+    restart: unless-stopped
+
+  # Database Admin Interface (phpMyAdmin)
+  database_admin:
+    container_name: mutillidae-database-admin
+    depends_on:
+      - database
+    image: webpwnized/mutillidae:database_admin
+    ports:
+      - "127.0.0.1:\${MUTILLIDAE_ADMIN_PORT:-8089}:80"
+    networks:
+      - datanet
+    restart: unless-stopped
+
+  # LDAP Directory Service
+  ldap:
+    container_name: mutillidae-ldap
+    image: webpwnized/mutillidae:ldap
+    ports:
+      - "127.0.0.1:389:389"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+    networks:
+      - ldapnet
+    restart: unless-stopped
+
+  # LDAP Admin Interface
+  ldap_admin:
+    container_name: mutillidae-ldap-admin
+    depends_on:
+      - ldap
+    image: webpwnized/mutillidae:ldap_admin
+    ports:
+      - "127.0.0.1:\${MUTILLIDAE_LDAP_ADMIN_PORT:-8090}:80"
+    networks:
+      - ldapnet
+    restart: unless-stopped
+
+volumes:
+  ldap_data:
+  ldap_config:
+
+networks:
+  datanet:
+    driver: bridge
+  ldapnet:
+    driver: bridge
 EOF
+
+  # Set additional environment variables
+  write_env_port "$dir" MUTILLIDAE_HTTPS_PORT 8445
+  write_env_port "$dir" MUTILLIDAE_ADMIN_PORT 8089
+  write_env_port "$dir" MUTILLIDAE_LDAP_ADMIN_PORT 8090
 }
 
 setup_dvws() {
@@ -744,7 +893,7 @@ setup_lab_dashboard() {
                     <h3>VAPI</h3>
                     <div class="port">Port: 8000</div>
                     <p>Vulnerable API - A Laravel-based vulnerable API designed for testing various security vulnerabilities in web APIs.</p>
-                    <a href="http://${server_ip}:8000" target="_blank" class="access-btn">Access VAPI</a>
+                    <a href="http://${server_ip}:8000/vapi/" target="_blank" class="access-btn">Access VAPI</a>
                     <br><a href="https://github.com/roottusk/vapi" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -960,76 +1109,168 @@ vapi_post() {
     done
   fi
 
-  # Create database initialization service for vAPI
-  if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-init:" "$dir/docker-compose.yml"; then
-    log INFO "Adding vAPI database initialization service"
-    # Insert services before the volumes section
-    sed -i '/^volumes:/i\
-  # vAPI database initialization service\
-  vapi-init:\
-    image: mysql:8.0\
-    depends_on:\
-      - db\
-    environment:\
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}\
-      - MYSQL_DATABASE=${DB_DATABASE}\
-    command: >\
-      sh -c "\
-        echo '\''Waiting for MySQL to be ready...'\'' &&\
-        until mysql -h db -u root -p${DB_PASSWORD} -e '\''SELECT 1'\'' >/dev/null 2>&1; do sleep 2; done &&\
-        echo '\''MySQL is ready, checking for database schema...'\'' &&\
-        if [ -f /vapi/vapi.sql ]; then\
-          echo '\''Importing vapi.sql schema...'\'' &&\
-          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} < /vapi/vapi.sql &&\
-          echo '\''Database schema imported successfully'\''\
-        else\
-          echo '\''vapi.sql not found, creating basic database structure...'\'' &&\
-          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} -e '\''CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'\'' &&\
-          echo '\''Basic database structure created'\''\
-        fi\
-      "\
-    volumes:\
-      - .:/vapi\
-    restart: "no"\
-' "$dir/docker-compose.yml"
-  elif [[ -f "$dir/docker-compose.yml" ]]; then
-    log INFO "vAPI database initialization service already exists in compose file"
-  fi
+  # Create enhanced docker-compose.yml with proper service structure
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    log INFO "Creating enhanced vAPI docker-compose.yml with initialization services"
+    # Backup original compose file
+    cp "$dir/docker-compose.yml" "$dir/docker-compose.yml.backup"
+    
+    # Create a new compose file with proper structure
+    cat > "$dir/docker-compose.yml" << 'EOF'
+services:
+  www:
+    build: .
+    ports: 
+      - "${VAPI_PORT:-8000}:80"
+    volumes:
+        - ./vapi:/var/www/html/vapi
+    links:
+        - db
+    networks:
+        - default
+    environment:
+      APP_NAME: Laravel
+      APP_ENV: local
+      APP_KEY: "base64:JUXTsCKQubRlvxGv6sVwkFL2rJ/gSksD4B/68948Mww:"
+      APP_DEBUG: "true"
+      APP_URL: http://vapi.test
+      SERVER_PORT: 80
+      LOG_CHANNEL: errorlog
+      LOG_LEVEL: debug
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: vapi
+      DB_USERNAME: root
+      DB_PASSWORD: vapi123456
+      BROADCAST_DRIVER: log
+      CACHE_DRIVER: file
+      FILESYSTEM_DRIVER: local
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: file
+      SESSION_LIFETIME: 120
+      MEMCACHED_HOST: 127.0.0.1
+      REDIS_HOST: 127.0.0.1
+      REDIS_PASSWORD: ""
+      REDIS_PORT: 6379
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_ENCRYPTION: ""
+      MAIL_FROM_ADDRESS: ""
+      MAIL_FROM_NAME: "${APP_NAME}"
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_BUCKET:
+      AWS_USE_PATH_STYLE_ENDPOINT: "false"
+      PUSHER_APP_ID:
+      PUSHER_APP_KEY:
+      PUSHER_APP_SECRET:
+      PUSHER_APP_CLUSTER: mt1
+      MIX_PUSHER_APP_KEY: "${PUSHER_APP_KEY}"
+      MIX_PUSHER_APP_CLUSTER: "${PUSHER_APP_CLUSTER}"
+    depends_on:
+      - db
+      - vapi-init
+      - vapi-laravel-init
 
-  # Create Laravel initialization service
-  if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q "^[[:space:]]*vapi-laravel-init:" "$dir/docker-compose.yml"; then
-    log INFO "Adding vAPI Laravel initialization service"
-    # Insert services before the volumes section
-    sed -i '/^volumes:/i\
-  # vAPI Laravel initialization service\
-  vapi-laravel-init:\
-    build:\
-      context: .\
-      dockerfile: Dockerfile\
-    depends_on:\
-      - db\
-      - vapi-init\
-    environment:\
-      - DB_HOST=db\
-      - DB_DATABASE=${DB_DATABASE}\
-      - DB_USERNAME=root\
-      - DB_PASSWORD=${DB_PASSWORD}\
-    command: >\
-      sh -c "\
-        echo '\''Waiting for database initialization to complete...'\'' &&\
-        sleep 10 &&\
-        echo '\''Running Laravel migrations and seeding...'\'' &&\
-        php artisan migrate --force &&\
-        php artisan db:seed --force &&\
-        php artisan key:generate --force &&\
-        echo '\''Laravel initialization completed successfully'\''\
-      "\
-    volumes:\
-      - .:/var/www/html\
-    restart: "no"\
-' "$dir/docker-compose.yml"
-  elif [[ -f "$dir/docker-compose.yml" ]]; then
-    log INFO "vAPI Laravel initialization service already exists in compose file"
+  db:
+    image: mysql:8.0
+    ports: 
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+        MYSQL_DATABASE: vapi
+        MYSQL_USER: vapi
+        MYSQL_PASSWORD: vapi123456
+        MYSQL_ROOT_PASSWORD: vapi123456
+    volumes:
+        - ./database:/docker-entrypoint-initdb.d
+        - ./conf:/etc/mysql/conf.d
+        - persistent:/var/lib/mysql
+    networks:
+        - default
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    links: 
+        - db:db
+    ports:
+      - 8001:80
+    environment:
+        MYSQL_USER: user
+        MYSQL_PASSWORD: test
+        MYSQL_ROOT_PASSWORD: test
+    networks:
+        - default
+
+  # vAPI database initialization service
+  vapi-init:
+    image: mysql:8.0
+    depends_on:
+      - db
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE}
+    command: >
+      sh -c "
+        echo 'Waiting for MySQL to be ready...' &&
+        until mysql -h db -u root -p${DB_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1; do sleep 2; done &&
+        echo 'MySQL is ready, checking for database schema...' &&
+        if [ -f /vapi/vapi.sql ]; then
+          echo 'Importing vapi.sql schema...' &&
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} < /vapi/vapi.sql &&
+          echo 'Database schema imported successfully'
+        else
+          echo 'vapi.sql not found, creating basic database structure...' &&
+          mysql -h db -u root -p${DB_PASSWORD} ${DB_DATABASE} -e 'CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);' &&
+          echo 'Basic database structure created'
+        fi
+      "
+    volumes:
+      - .:/vapi
+    restart: "no"
+    networks:
+        - default
+
+  # vAPI Laravel initialization service
+  vapi-laravel-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+      - vapi-init
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=root
+      - DB_PASSWORD=${DB_PASSWORD}
+    command: >
+      sh -c "
+        echo 'Waiting for database initialization to complete...' &&
+        sleep 10 &&
+        echo 'Running Laravel migrations and seeding...' &&
+        php artisan migrate --force &&
+        php artisan db:seed --force &&
+        php artisan key:generate --force &&
+        echo 'Laravel initialization completed successfully'
+      "
+    volumes:
+      - .:/var/www/html
+    restart: "no"
+    networks:
+        - default
+
+networks:
+  default:
+
+volumes:
+  persistent:
+EOF
   fi
 
   # Create Postman collections directory and download collections
@@ -1157,6 +1398,7 @@ EOF
 
   # If compose uses local build contexts, allow building
   if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
+    ensure_dir "$dir"
     touch "$dir/.allow_build"
   fi
 }

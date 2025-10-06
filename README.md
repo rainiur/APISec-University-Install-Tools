@@ -37,7 +37,7 @@ Supported services and default host ports (non-conflicting):
 - xvwa (8085:80)
 - vampi (8086:5000 preferred; fallback 8086:80)
 - dvws (8087:80)
-- mutillidae (8088:80)
+- mutillidae (8088:80, 8445:443, 8089:80, 8090:80, 389:389)
 - lab-dashboard (80:80)
 
 ### Usage
@@ -269,6 +269,61 @@ The vAPI installation now fully complies with the official requirements:
 
 - __YAML parse/port conflicts__
   - Fix: Ports normalized and parameterized; adjust port in the service `.env` and restart.
+
+- __vAPI YAML parsing errors__
+  - Cause: Multi-line sed commands in vAPI post-setup were malformed, causing YAML syntax errors.
+  - Fix: Script now uses proper YAML file generation and insertion methods. Run `update vapi` to apply fixes.
+
+- __vAPI dashboard URL incorrect__
+  - Cause: Lab dashboard was pointing to root vAPI URL instead of the correct `/vapi/` path.
+  - Fix: Dashboard now correctly links to `http://<server-ip>:8000/vapi/` for proper vAPI access.
+
+- __DVGA connection reset by peer__
+  - Cause: DVGA was configured with `WEB_HOST=127.0.0.1` which only binds to localhost inside the container.
+  - Fix: The script now sets `WEB_HOST=0.0.0.0` to allow external connections. Run `install dvga` to rebuild with the correct configuration.
+
+- __bWAPP "Unknown database 'bWAPP'" error__
+  - Cause: bWAPP requires proper database initialization with schema creation and user setup.
+  - Fix: The script now includes automatic fallback mechanism that:
+    1. First attempts automatic installation via `install.php?install=yes` (5 retries)
+    2. If automatic installation fails, manually creates the database schema
+    3. Creates all required tables (users, blog, visitors, movies, heroes)
+    4. Populates tables with default data and sample content
+  - If the error persists, try:
+    1. Stop the service: `sudo ./manage_vuln_services.sh stop bwapp`
+    2. Clean the service: `sudo ./manage_vuln_services.sh clean bwapp`
+    3. Reinstall: `sudo ./manage_vuln_services.sh install bwapp`
+    4. Wait 3-5 minutes for full initialization (includes automatic database setup)
+    5. If still failing, manually access the install.php: `http://192.168.8.182:8082/install.php`
+  - Alternative: Use the original Docker command: `docker run -d -p 8082:80 hackersploit/bwapp-docker`
+  - Reference: [bWAPP Installation Guide](https://github.com/ahmedhamdy0x/bwapp-Installation) for manual setup details
+
+- __Mutillidae "The database server appears to be offline" error__
+  - Cause: Mutillidae requires a MySQL database connection but the original image doesn't include database setup.
+  - Fix: The script now uses the official [webpwnized/mutillidae-docker](https://github.com/webpwnized/mutillidae-docker) repository that includes:
+    1. **Database Service**: `webpwnized/mutillidae:database` - MySQL database with pre-configured schema
+    2. **Web Application**: `webpwnized/mutillidae:www` - Apache/PHP with Mutillidae source code
+    3. **Database Admin**: `webpwnized/mutillidae:database_admin` - phpMyAdmin interface
+    4. **LDAP Service**: `webpwnized/mutillidae:ldap` - OpenLDAP directory service
+    5. **LDAP Admin**: `webpwnized/mutillidae:ldap_admin` - phpLDAPadmin interface
+    6. **Proper Networking**: Separate networks for database and LDAP communication
+  - If the error persists, try:
+    1. Stop the service: `sudo ./manage_vuln_services.sh stop mutillidae`
+    2. Clean the service: `sudo ./manage_vuln_services.sh clean mutillidae`
+    3. Reinstall: `sudo ./manage_vuln_services.sh install mutillidae`
+    4. Wait 3-5 minutes for full initialization
+    5. If still failing, check container logs: `docker logs mutillidae-www`
+  - Access URLs:
+    - **Main application (HTTP)**: `http://192.168.8.182:8088/`
+    - **Main application (HTTPS)**: `https://192.168.8.182:8445/`
+    - **Database admin**: `http://localhost:8089/` (phpMyAdmin)
+    - **LDAP admin**: `http://localhost:8090/` (phpLDAPadmin)
+    - **LDAP service**: `ldap://localhost:389`
+  - **Important**: On first access, you'll see a database warning. Click the "rebuild database" link to initialize the database.
+  - **Alternative Database Setup**: You can also trigger the database setup using: `curl http://localhost:8088/set-up-database.php`
+  - **Port Configuration**: Uses custom ports to avoid conflicts: HTTP (8088), HTTPS (8445), Database Admin (8089), LDAP Admin (8090), LDAP (389).
+  - **Database Schema**: The setup script creates all necessary tables including accounts, blogs, credit_cards, pen_test_tools, and more.
+  - Reference: [webpwnized/mutillidae-docker](https://github.com/webpwnized/mutillidae-docker) for complete setup details
 
 ## Security posture and safe use
 
