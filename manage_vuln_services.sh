@@ -32,18 +32,18 @@ fi
 # extra: optional post-setup (function name)
 SERVICES=(
   "name=crapi type=compose_url src=https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml expose_prompt=true post=crapi_post"
-  "name=vapi type=git src=https://github.com/roottusk/vapi.git expose_prompt=false post=vapi_post"
+  "name=vapi type=git src=https://github.com/roottusk/vapi.git expose_prompt=false post=vapi_post setup=vapi_setup"
   "name=dvga type=builtin src=setup_dvga expose_prompt=true"
   "name=juice-shop type=builtin src=setup_juice_shop expose_prompt=false"
   # Additional vulnerable apps
   "name=webgoat type=builtin src=setup_webgoat expose_prompt=false post=webgoat_post"
   "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
   "name=bwapp type=builtin src=setup_bwapp expose_prompt=false"
-  "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post"
-  "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=true post=pixi_post"
+  "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post setup=security_shepherd_setup"
+  "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=true post=pixi_post setup=pixi_setup"
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false post=mutillidae_post"
-  "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post"
+  "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post setup=vampi_setup"
   "name=dvws type=builtin src=setup_dvws expose_prompt=false"
   "name=lab-dashboard type=builtin src=setup_lab_dashboard expose_prompt=false"
 )
@@ -56,43 +56,22 @@ write_env_port() { # write or ensure PORT env var in .env
   grep -q "^${var}=" "$dir/.env" 2>/dev/null && sed -i "s/^${var}=.*/${var}=${val}/" "$dir/.env" || echo "${var}=${val}" >>"$dir/.env";
 }
 
-# Set Security Shepherd ports to 8083 (HTTP) and 8443 (HTTPS)
+# Security Shepherd post-setup (runs after containers start)
 security_shepherd_post() {
   local dir="$BASE_DIR/security-shepherd"
-  write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
   
-  # Remove obsolete version attribute from docker-compose.yml
+  # Update port mappings in docker-compose.yml (if not already done)
   if [[ -f "$dir/docker-compose.yml" ]]; then
-    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
     sed -E -i 's/(\s*-\s*")([0-9]{2,5})(:80\")/  - "${SECURITY_SHEPHERD_PORT:-8083}:80"/g' "$dir/docker-compose.yml" || true
-
-    # Replace non-existent OWASP images with official images
-    # Mongo: use stable 4.2 tag for broad compatibility
-    sed -E -i 's|(image:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
-    sed -E -i 's|(IMAGE_MONGO:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
-    # MariaDB: map to mariadb:10.6.11 to match DB_VERSION
-    sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
-    sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
   fi
 
-  # Ensure .env has valid images and secure secrets
+  # Ensure .env has all required configuration
   local env_file="$dir/.env"
   touch "$env_file"
-  # Set image overrides to public images
-  if grep -q '^IMAGE_MONGO=' "$env_file"; then
-    sed -i 's/^IMAGE_MONGO=.*/IMAGE_MONGO=mongo:4.2/' "$env_file"
-  else
-    echo 'IMAGE_MONGO=mongo:4.2' >> "$env_file"
-  fi
-  if grep -q '^IMAGE_MARIADB=' "$env_file"; then
-    sed -i 's/^IMAGE_MARIADB=.*/IMAGE_MARIADB=mariadb:10.6.11/' "$env_file"
-  else
-    echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
-  fi
   
-  # Set HTTP and HTTPS ports to fixed values
+  # Set HTTP and HTTPS ports to fixed values (8445 to avoid conflict with crAPI on 8443)
   local http_port="8083"
-  local https_port="8443"
+  local https_port="8445"
   
   if grep -q '^HTTP_PORT=' "$env_file"; then
     sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"
@@ -117,36 +96,15 @@ security_shepherd_post() {
     echo "TLS_KEYSTORE_PASS=${tlspass}" >> "$env_file"
   fi
 
-  # Avoid host port conflicts: move DB host port to 3307 (loopback binding remains)
-  if grep -q '^DB_PORT_MAPPED_HOST=' "$env_file"; then
-    sed -i 's/^DB_PORT_MAPPED_HOST=.*/DB_PORT_MAPPED_HOST=3307/' "$env_file"
-  else
-    echo 'DB_PORT_MAPPED_HOST=3307' >> "$env_file"
-  fi
+  # Fix port conflicts: move DB host port to 3307 and ensure it's applied
+  write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
+  # Force DB port to 3307 to avoid conflicts with other MySQL containers  
+  sed -i 's/^DB_PORT_MAPPED_HOST=.*/DB_PORT_MAPPED_HOST=3307/' "$env_file" 2>/dev/null || echo 'DB_PORT_MAPPED_HOST=3307' >> "$env_file"
+  # Ensure TEST_MYSQL_PORT also uses the remapped port
+  sed -i 's/^TEST_MYSQL_PORT=.*/TEST_MYSQL_PORT=3307/' "$env_file" 2>/dev/null || echo 'TEST_MYSQL_PORT=3307' >> "$env_file"
   
-  # Security Shepherd requires Maven build to generate target/ files before Docker build
-  log INFO "Building Security Shepherd with Maven to generate required files"
-  cd "$dir" || return 1
-  
-  # Check if Maven is available
-  if ! command -v mvn >/dev/null 2>&1; then
-    log ERROR "Maven is required but not installed. Please install Maven to build Security Shepherd."
-    return 1
-  fi
-  
-  # Run Maven build to generate target/ directory with required files
-  log INFO "Running Maven build to generate target/ directory files"
-  if mvn clean compile -q; then
-    log INFO "Maven build completed successfully"
-  else
-    log ERROR "Maven build failed. Security Shepherd requires a successful Maven build before Docker build."
-    return 1
-  fi
-  
-  # If compose uses local build contexts, allow building
-  if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
-    touch "$dir/.allow_build"
-  fi
+  # Note: Maven build and .allow_build creation are now handled by security_shepherd_setup function
+  log INFO "Security Shepherd post-setup completed"
 }
 
 # Fix crAPI gateway healthcheck and handle Docker build issues
@@ -267,53 +225,56 @@ services:
 EOF
 }
 
-# Attempt to normalize Pixi port to 8084 if a compose exists
+# Pixi post-setup (runs after containers start) - most configuration now handled by pixi_setup
 pixi_post() {
   local dir="$BASE_DIR/pixi"
+  
+  # Port conflict resolution and docker-compose.yaml fixes are now handled by pixi_setup function
+  # This function focuses on ensuring environment variables are properly set as a backup
+  
+  local env_file="$dir/.env"
+  touch "$env_file"
+  
+  # Ensure all required port variables are set (backup verification)
   write_env_port "$dir" PIXI_PORT 8084
-  # Support both .yml and .yaml compose filenames
+  
+  # Verify MongoDB port variables are set correctly
+  if ! grep -q '^PIXI_MONGO_PORT=' "$env_file"; then
+    echo 'PIXI_MONGO_PORT=27018' >> "$env_file"
+  fi
+  if ! grep -q '^PIXI_MONGO_HTTP_PORT=' "$env_file"; then
+    echo 'PIXI_MONGO_HTTP_PORT=28018' >> "$env_file"
+  fi
+  
+  # Verify app port variables are set correctly  
+  if ! grep -q '^PIXI_APP_PORT=' "$env_file"; then
+    echo 'PIXI_APP_PORT=18000' >> "$env_file"
+  fi
+  if ! grep -q '^PIXI_ADMIN_PORT=' "$env_file"; then
+    echo 'PIXI_ADMIN_PORT=18090' >> "$env_file"
+  fi
+  
+  log INFO "Pixi post-setup completed - service should be accessible at http://localhost:18000"
+}
+
+# Early setup for VAmPI to create .allow_build before build process
+vampi_setup() {
+  local dir="$BASE_DIR/vampi"
+  ensure_dir "$dir"
+  
+  # Create .allow_build file early so installation logic knows to build locally
+  touch "$dir/.allow_build"
+  
+  # Remove obsolete version attribute from docker-compose.yaml to avoid warnings
   local compose_file="$dir/docker-compose.yml"
   if [[ ! -f "$compose_file" && -f "$dir/docker-compose.yaml" ]]; then
     compose_file="$dir/docker-compose.yaml"
   fi
   if [[ -f "$compose_file" ]]; then
-    # Remove obsolete version attribute to avoid Docker Compose warnings
     sed -i '/^version:/d' "$compose_file" || true
-    sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${PIXI_PORT:-8084}:80"/g' "$compose_file" || true
-    # Avoid Mongo host port conflicts and restrict to loopback
-    sed -E -i 's/^(\s*)-\s*"27017:27017"/\1- "127.0.0.1:${PIXI_MONGO_PORT:-27018}:27017"/g' "$compose_file" || true
-    sed -E -i 's/^(\s*)-\s*"28017:28017"/\1- "127.0.0.1:${PIXI_MONGO_HTTP_PORT:-28018}:28017"/g' "$compose_file" || true
-    # Remap Pixi app host ports to avoid conflicts and bind to loopback
-    sed -E -i 's/^(\s*)-\s*"8000:8000"/\1- "127.0.0.1:${PIXI_APP_PORT:-18000}:8000"/g' "$compose_file" || true
-    sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "127.0.0.1:${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
   fi
-  # Pixi app image is built locally; allow compose to build it
-  ensure_dir "$dir"
-  touch "$dir/.allow_build"
-
-  # Ensure Pixi .env has Mongo host port variables
-  local env_file="$dir/.env"
-  touch "$env_file"
-  if grep -q '^PIXI_MONGO_PORT=' "$env_file"; then
-    sed -i 's/^PIXI_MONGO_PORT=.*/PIXI_MONGO_PORT=27018/' "$env_file"
-  else
-    echo 'PIXI_MONGO_PORT=27018' >> "$env_file"
-  fi
-  if grep -q '^PIXI_MONGO_HTTP_PORT=' "$env_file"; then
-    sed -i 's/^PIXI_MONGO_HTTP_PORT=.*/PIXI_MONGO_HTTP_PORT=28018/' "$env_file"
-  else
-    echo 'PIXI_MONGO_HTTP_PORT=28018' >> "$env_file"
-  fi
-  if grep -q '^PIXI_APP_PORT=' "$env_file"; then
-    sed -i 's/^PIXI_APP_PORT=.*/PIXI_APP_PORT=18000/' "$env_file"
-  else
-    echo 'PIXI_APP_PORT=18000' >> "$env_file"
-  fi
-  if grep -q '^PIXI_ADMIN_PORT=' "$env_file"; then
-    sed -i 's/^PIXI_ADMIN_PORT=.*/PIXI_ADMIN_PORT=18090/' "$env_file"
-  else
-    echo 'PIXI_ADMIN_PORT=18090' >> "$env_file"
-  fi
+  
+  log INFO "VAmPI configured for local build"
 }
 
 # Normalize VAmPI to host 8086; prefer container 5000 if present, else 80
@@ -352,9 +313,6 @@ vampi_post() {
       fi
     fi
   fi
-  # Allow building local images for VAmPI
-  ensure_dir "$dir"
-  touch "$dir/.allow_build"
   
   # Auto-populate VAmPI database after startup
   log INFO "Setting up VAmPI database auto-population"
@@ -778,6 +736,208 @@ services:
 EOF
 }
 
+# Early setup for vAPI to create .allow_build and fix warnings before build process
+vapi_setup() {
+  local dir="$BASE_DIR/vapi"
+  ensure_dir "$dir"
+  
+  # Create .allow_build file early so installation logic knows to build locally
+  touch "$dir/.allow_build"
+  
+  # Remove obsolete version attribute from docker-compose.yml to avoid warnings
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
+  fi
+  
+  # Create/update .env with required variables to silence Docker Compose warnings
+  local env_file="$dir/.env"
+  if [[ ! -f "$env_file" ]]; then
+    log INFO "Creating .env for vAPI with required variables"
+    # Generate a Laravel-style base64 key
+    local genkey
+    genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
+    # Generate a strong random DB password (URL-safe base64)  
+    local dbpass
+    dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
+    printf '%s\n' \
+"APP_NAME=VAPI" \
+"APP_ENV=local" \
+"APP_KEY=base64:${genkey}" \
+"APP_DEBUG=true" \
+"APP_URL=http://localhost" \
+"PUSHER_APP_KEY=" \
+"PUSHER_APP_CLUSTER=" \
+"DB_CONNECTION=mysql" \
+"DB_HOST=db" \
+"DB_PORT=3306" \
+"DB_DATABASE=vapi" \
+"DB_USERNAME=root" \
+"DB_PASSWORD=${dbpass}" \
+>> "$env_file"
+  else
+    # Ensure required keys exist to avoid warnings
+    grep -q '^APP_NAME='            "$env_file" || echo 'APP_NAME=VAPI' >>"$env_file"
+    grep -q '^PUSHER_APP_KEY='      "$env_file" || echo 'PUSHER_APP_KEY=' >>"$env_file"
+    grep -q '^PUSHER_APP_CLUSTER='  "$env_file" || echo 'PUSHER_APP_CLUSTER=' >>"$env_file"
+    grep -q '^APP_ENV='             "$env_file" || echo 'APP_ENV=local' >>"$env_file"
+    grep -q '^APP_DEBUG='           "$env_file" || echo 'APP_DEBUG=true' >>"$env_file"
+    grep -q '^APP_URL='             "$env_file" || echo 'APP_URL=http://localhost' >>"$env_file"
+  fi
+  
+  # Set port configuration early
+  write_env_port "$dir" VAPI_PORT 8000
+  
+  log INFO "vAPI configured for local build with environment variables set"
+}
+
+# Early setup for Security Shepherd to fix image references before build process  
+security_shepherd_setup() {
+  local dir="$BASE_DIR/security-shepherd"
+  ensure_dir "$dir"
+  
+  # Replace non-existent OWASP images with official images in docker-compose.yml
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    log INFO "Fixing Security Shepherd image references before build"
+    
+    # Remove obsolete version attribute from docker-compose.yml
+    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
+    
+    # Replace non-existent OWASP images with official images
+    # Mongo: use stable 4.2 tag for broad compatibility
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MONGO:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
+    # MariaDB: map to mariadb:10.6.11 to match DB_VERSION
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
+  fi
+  
+  # Create/update .env with proper image overrides
+  local env_file="$dir/.env"
+  touch "$env_file"
+  
+  # Set image overrides to public images
+  if grep -q '^IMAGE_MONGO=' "$env_file"; then
+    sed -i 's/^IMAGE_MONGO=.*/IMAGE_MONGO=mongo:4.2/' "$env_file"
+  else
+    echo 'IMAGE_MONGO=mongo:4.2' >> "$env_file"
+  fi
+  if grep -q '^IMAGE_MARIADB=' "$env_file"; then
+    sed -i 's/^IMAGE_MARIADB=.*/IMAGE_MARIADB=mariadb:10.6.11/' "$env_file"
+  else
+    echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
+  fi
+  
+  # Set ports early and fix conflicts
+  write_env_port "$dir" SECURITY_SHEPHERD_PORT 8083
+  # Immediately fix port conflicts in .env (force override any existing values)
+  if [[ -f "$env_file" ]]; then
+    sed -i 's/^DB_PORT_MAPPED_HOST=.*/DB_PORT_MAPPED_HOST=3307/' "$env_file"
+    sed -i 's/^TEST_MYSQL_PORT=.*/TEST_MYSQL_PORT=3307/' "$env_file"
+    # Also ensure HTTP and HTTPS ports are set to avoid defaults
+    sed -i 's/^HTTP_PORT=.*/HTTP_PORT=8083/' "$env_file"
+    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=8445/' "$env_file"
+  fi
+  
+  # Security Shepherd requires Maven build to generate target/ files before Docker build
+  if [[ -d "$dir" ]]; then
+    log INFO "Building Security Shepherd with Maven to generate required files"
+    cd "$dir" || return 1
+    
+    # Check if Maven is available
+    if ! command -v mvn >/dev/null 2>&1; then
+      log ERROR "Maven is required but not installed. Please install Maven to build Security Shepherd."
+      return 1
+    fi
+    
+    # Run Maven build to generate target/ directory with required files
+    log INFO "Running Maven build to generate target/ directory files"
+    if mvn clean compile -q; then
+      log INFO "Maven build completed successfully"
+      
+      # Copy generated files to locations expected by Dockerfile
+      log INFO "Copying generated schema files to expected locations for Docker build"
+      if [[ -f "target/classes/database/coreSchema.sql" ]]; then
+        cp "target/classes/database/coreSchema.sql" "target/coreSchema.sql"
+      fi
+      if [[ -f "target/classes/database/moduleSchemas.sql" ]]; then
+        cp "target/classes/database/moduleSchemas.sql" "target/moduleSchemas.sql"  
+      fi
+      if [[ -f "target/classes/mongodb/moduleSchemas.js" ]]; then
+        cp "target/classes/mongodb/moduleSchemas.js" "target/moduleSchemas.js"
+      fi
+      log INFO "Schema files copied to target/ root for Docker build"
+    else
+      log ERROR "Maven build failed. Security Shepherd requires a successful Maven build before Docker build."
+      return 1
+    fi
+  fi
+  
+  # If compose uses local build contexts, allow building
+  if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
+    touch "$dir/.allow_build"
+  fi
+  
+  log INFO "Security Shepherd configured with correct image references and Maven build completed"
+}
+
+# Early setup for Pixi to create .allow_build and fix port conflicts before build process
+pixi_setup() {
+  local dir="$BASE_DIR/pixi"
+  ensure_dir "$dir"
+  
+  # Create .allow_build file early so installation logic knows to build locally
+  touch "$dir/.allow_build"
+  
+  # Support both .yml and .yaml compose filenames and fix port conflicts BEFORE build
+  local compose_file="$dir/docker-compose.yml"
+  if [[ ! -f "$compose_file" && -f "$dir/docker-compose.yaml" ]]; then
+    compose_file="$dir/docker-compose.yaml"
+  fi
+  if [[ -f "$compose_file" ]]; then
+    # Remove obsolete version attribute to avoid Docker Compose warnings
+    sed -i '/^version:/d' "$compose_file" || true
+    
+    # Fix MongoDB port conflicts (Security Shepherd uses 27017, so use 27018 for Pixi)
+    sed -E -i 's/^(\s*)-\s*"27017:27017"/\1- "127.0.0.1:${PIXI_MONGO_PORT:-27018}:27017"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"28017:28017"/\1- "127.0.0.1:${PIXI_MONGO_HTTP_PORT:-28018}:28017"/g' "$compose_file" || true
+    
+    # Fix app port conflicts (vAPI uses 8000, so use 18000 for Pixi)
+    sed -E -i 's/^(\s*)-\s*"8000:8000"/\1- "127.0.0.1:${PIXI_APP_PORT:-18000}:8000"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "127.0.0.1:${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
+  fi
+  
+  # Set up port configuration with non-conflicting values
+  write_env_port "$dir" PIXI_PORT 8084
+  local env_file="$dir/.env"
+  touch "$env_file"
+  
+  # Set MongoDB ports to avoid conflicts with Security Shepherd (27017 → 27018, 28017 → 28018)
+  if grep -q '^PIXI_MONGO_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_MONGO_PORT=.*/PIXI_MONGO_PORT=27018/' "$env_file"
+  else
+    echo 'PIXI_MONGO_PORT=27018' >> "$env_file"
+  fi
+  if grep -q '^PIXI_MONGO_HTTP_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_MONGO_HTTP_PORT=.*/PIXI_MONGO_HTTP_PORT=28018/' "$env_file"
+  else
+    echo 'PIXI_MONGO_HTTP_PORT=28018' >> "$env_file"
+  fi
+  
+  # Set app ports to avoid conflicts with vAPI (8000 → 18000, 8090 → 18090)
+  if grep -q '^PIXI_APP_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_APP_PORT=.*/PIXI_APP_PORT=18000/' "$env_file"
+  else
+    echo 'PIXI_APP_PORT=18000' >> "$env_file"
+  fi
+  if grep -q '^PIXI_ADMIN_PORT=' "$env_file"; then
+    sed -i 's/^PIXI_ADMIN_PORT=.*/PIXI_ADMIN_PORT=18090/' "$env_file"
+  else
+    echo 'PIXI_ADMIN_PORT=18090' >> "$env_file"
+  fi
+  
+  log INFO "Pixi configured for local build with port conflicts resolved (MongoDB: 27018, App: 18000)"
+}
+
 setup_lab_dashboard() {
   local dir="$BASE_DIR/lab-dashboard"
   ensure_dir "$dir"
@@ -1081,11 +1241,11 @@ EOF
 
 vapi_post() {
   local dir="$BASE_DIR/vapi"
-  # Parameterize host port via env for maintainability
-  write_env_port "$dir" VAPI_PORT 8000
+  
+  # Port and environment setup is now handled by vapi_setup function
+  # This function focuses on post-startup configuration
+  
   if [[ -f "$dir/docker-compose.yml" ]]; then
-    # Remove obsolete version attribute to avoid Docker Compose warnings
-    sed -i '/^version:/d' "$dir/docker-compose.yml" || true
     # Replace host port before :80 with ${VAPI_PORT:-8000}, preserving original indentation
     sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${VAPI_PORT:-8000}:80"/g' "$dir/docker-compose.yml" || true
 
@@ -1105,54 +1265,23 @@ vapi_post() {
     ' "$dir/docker-compose.yml" > "$dir/docker-compose.yml.__tmp" && mv "$dir/docker-compose.yml.__tmp" "$dir/docker-compose.yml" || true
   fi
 
-  # Create or populate .env with required variables per vAPI README to silence compose warnings
+  # Ensure remaining database variables are set
   local env_file="$dir/.env"
-  if [[ ! -f "$env_file" ]]; then
-    log INFO "Creating .env for vapi"
-    # Generate a Laravel-style base64 key if possible; do not echo the value to logs
-    local genkey
-    genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
-    # Generate a strong random DB password (URL-safe base64)
+  touch "$env_file"
+  grep -q '^DB_CONNECTION='       "$env_file" || echo 'DB_CONNECTION=mysql' >>"$env_file"
+  grep -q '^DB_HOST='             "$env_file" || echo 'DB_HOST=db' >>"$env_file"
+  grep -q '^DB_PORT='             "$env_file" || echo 'DB_PORT=3306' >>"$env_file"
+  grep -q '^DB_DATABASE='         "$env_file" || echo 'DB_DATABASE=vapi' >>"$env_file"
+  grep -q '^DB_USERNAME='         "$env_file" || echo 'DB_USERNAME=root' >>"$env_file"
+  if ! grep -q '^DB_PASSWORD=' "$env_file"; then
     local dbpass
     dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
-    printf '%s\n' \
-"APP_NAME=VAPI" \
-"APP_ENV=local" \
-"APP_KEY=base64:${genkey}" \
-"APP_DEBUG=true" \
-"APP_URL=http://localhost" \
-"PUSHER_APP_KEY=" \
-"PUSHER_APP_CLUSTER=" \
-"DB_CONNECTION=mysql" \
-"DB_HOST=db" \
-"DB_PORT=3306" \
-"DB_DATABASE=vapi" \
-"DB_USERNAME=root" \
-"DB_PASSWORD=${dbpass}" \
->> "$env_file"
-  else
-    # Ensure required keys exist; append only if missing (do not overwrite existing values)
-    grep -q '^APP_NAME='            "$env_file" || echo 'APP_NAME=VAPI' >>"$env_file"
-    grep -q '^PUSHER_APP_KEY='      "$env_file" || echo 'PUSHER_APP_KEY=' >>"$env_file"
-    grep -q '^PUSHER_APP_CLUSTER='  "$env_file" || echo 'PUSHER_APP_CLUSTER=' >>"$env_file"
-    grep -q '^APP_ENV='             "$env_file" || echo 'APP_ENV=local' >>"$env_file"
-    grep -q '^APP_DEBUG='           "$env_file" || echo 'APP_DEBUG=true' >>"$env_file"
-    grep -q '^APP_URL='             "$env_file" || echo 'APP_URL=http://localhost' >>"$env_file"
-    grep -q '^DB_CONNECTION='       "$env_file" || echo 'DB_CONNECTION=mysql' >>"$env_file"
-    grep -q '^DB_HOST='             "$env_file" || echo 'DB_HOST=db' >>"$env_file"
-    grep -q '^DB_PORT='             "$env_file" || echo 'DB_PORT=3306' >>"$env_file"
-    grep -q '^DB_DATABASE='         "$env_file" || echo 'DB_DATABASE=vapi' >>"$env_file"
-    grep -q '^DB_USERNAME='          "$env_file" || echo 'DB_USERNAME=root' >>"$env_file"
-    if ! grep -q '^DB_PASSWORD=' "$env_file"; then
-      local dbpass
-      dbpass="$(openssl rand -base64 24 2>/dev/null | tr -d '\n' | tr '/+' '_-' || head -c 24 /dev/urandom | base64 | tr -d '\n' | tr '/+' '_-')"
-      echo "DB_PASSWORD=${dbpass}" >>"$env_file"
-    fi
-    if ! grep -q '^APP_KEY=' "$env_file"; then
-      local genkey
-      genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
-      echo "APP_KEY=base64:${genkey}" >>"$env_file"
-    fi
+    echo "DB_PASSWORD=${dbpass}" >>"$env_file"
+  fi
+  if ! grep -q '^APP_KEY=' "$env_file"; then
+    local genkey
+    genkey="$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)"
+    echo "APP_KEY=base64:${genkey}" >>"$env_file"
   fi
 
   # Enhanced vAPI setup: Database schema import and Laravel initialization
@@ -1461,16 +1590,12 @@ Laravel will be automatically initialized with migrations and seeding.
 ✅ Environment variables setup
 EOF
 
-  # If compose uses local build contexts, allow building
-  if [[ -f "$dir/docker-compose.yml" ]] && grep -qE '^\s*build:' "$dir/docker-compose.yml"; then
-    ensure_dir "$dir"
-    touch "$dir/.allow_build"
-  fi
+  # Note: .allow_build file is created by vapi_setup function before build process
 }
 
 # ---------- core actions ----------
 install_or_update_service() {
-  local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"
+  local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"; local setup="${6:-}"
   local dir="$BASE_DIR/$name"
   ensure_dir "$dir"
 
@@ -1517,6 +1642,9 @@ install_or_update_service() {
       ;;
     *) log ERROR "Unknown service type: $type"; exit 1;;
   esac
+
+  # Optional early setup function (runs before build process)
+  if [[ -n "$setup" ]]; then "$setup"; fi
 
   # Optional exposure prompt
   if [[ "$expose_prompt" == "true" && ${EXPOSE:=false} == true ]]; then
@@ -1569,7 +1697,19 @@ start_service() {
     (cd "$dir" && sudo $COMPOSE_CMD up -d --no-build)
   fi
 }
-stop_service()  { local name="$1"; (cd "$BASE_DIR/$name" && sudo $COMPOSE_CMD down); }
+stop_service()  { 
+  local name="$1"; local dir="$BASE_DIR/$name"
+  if [[ -d "$dir" ]]; then
+    # Check if docker-compose file exists
+    if [[ -f "$dir/docker-compose.yml" ]] || [[ -f "$dir/docker-compose.yaml" ]]; then
+      (cd "$dir" && sudo $COMPOSE_CMD down)
+    else
+      log INFO "$name directory exists but no docker-compose file found; nothing to stop"
+    fi
+  else
+    log INFO "$name not installed; nothing to stop"
+  fi
+}
 clean_service() {
   local name="$1"; local dir="$BASE_DIR/$name"
   if [[ -d "$dir" ]]; then
@@ -1587,9 +1727,16 @@ for_each_service() {
   local target="${1:-all}"; shift || true
   local handled=false
   for entry in "${SERVICES[@]}"; do
-    eval "$entry" # defines: name type src expose_prompt [post]
-    if [[ "$target" == "all" || "$target" == "$name" ]]; then
-      "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}"
+    # Use a subshell to completely isolate variables and immediately execute if matched
+    if (
+      eval "$entry" # defines: name type src expose_prompt [post] [setup]
+      if [[ "$target" == "all" || "$target" == "$name" ]]; then
+        "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}" "${setup:-}"
+        exit 0  # Signal success to parent shell
+      else
+        exit 1  # Signal no match to parent shell
+      fi
+    ); then
       handled=true
     fi
   done
@@ -1600,9 +1747,9 @@ for_each_service() {
 
 # Wrappers for for_each_service with appropriate function signature
 install_update_wrapper() { install_or_update_service "$@"; }
-start_wrapper()          { local name="$1"; shift 4 || true; start_service "$name"; }
-stop_wrapper()           { local name="$1"; shift 4 || true; stop_service "$name"; }
-clean_wrapper()          { local name="$1"; shift 4 || true; clean_service "$name"; }
+start_wrapper()          { local name="$1"; shift 5 || true; start_service "$name"; }
+stop_wrapper()           { local name="$1"; shift 5 || true; stop_service "$name"; }
+clean_wrapper()          { local name="$1"; shift 5 || true; clean_service "$name"; }
 uninstall_wrapper()      { local name="$1"; clean_service "$name"; }
 
 # ---------- dependency bootstrap (optional) ----------

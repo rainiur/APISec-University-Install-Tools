@@ -254,6 +254,20 @@ The vAPI installation now fully complies with the official requirements:
   - Cause: Service expects local build or image name changed upstream.
   - Fix: Ensure `.allow_build` exists and rerun `update`/`start`, or manually run `docker compose build` in `/opt/lab/<service>/`.
 
+- __vAPI "No such image: vapi-www:latest" error__
+  - Cause: vAPI requires local Docker image building but the script was attempting to pull a non-existent image.
+  - Fix: The script now automatically creates `.allow_build` file before the build process through the `vapi_setup` function.
+  - This ensures vAPI is built locally instead of attempting to pull from registry.
+  - If you encounter this error, run: `sudo ./manage_vuln_services.sh install vapi`
+
+- __Pixi "address already in use" error on ports 27017 or 8000__
+  - Cause: Pixi's default ports conflict with Security Shepherd (MongoDB 27017) and vAPI (app 8000).
+  - Fix: The script now automatically remaps Pixi ports during setup to avoid conflicts.
+  - MongoDB: 27017 → 27018, HTTP: 28017 → 28018
+  - App: 8000 → 18000, Admin: 8090 → 18090
+  - Pixi will be accessible at: `http://localhost:18000`
+  - If you encounter this error, run: `sudo ./manage_vuln_services.sh stop pixi && sudo ./manage_vuln_services.sh install pixi`
+
 - __crAPI healthcheck failing__
   - Fix: Run `update crapi` to regenerate override; script auto-detects the gateway service and writes a wget-based healthcheck.
 
@@ -324,6 +338,85 @@ The vAPI installation now fully complies with the official requirements:
   - **Port Configuration**: Uses custom ports to avoid conflicts: HTTP (8088), HTTPS (8445), Database Admin (8089), LDAP Admin (8090), LDAP (389).
   - **Database Schema**: The setup script creates all necessary tables including accounts, blogs, credit_cards, pen_test_tools, and more.
   - Reference: [webpwnized/mutillidae-docker](https://github.com/webpwnized/mutillidae-docker) for complete setup details
+
+## Bug Fixes and Improvements (October 2025)
+
+### Fixed: Incorrect Directory Creation During Single Service Installs
+
+**Issue**: When installing a single service (e.g., `sudo ./manage_vuln_services.sh install lab-dashboard`), the script incorrectly created directories for other services like `pixi` and `vampi`, even though those services were not being installed.
+
+**Root Cause**: Variable scoping bug in the `for_each_service()` function where `eval` statements from all services overwrote shell variables, causing the wrong `setup` and `post` functions to be executed.
+
+**Fix**: Implemented proper variable isolation using subshells to ensure only the targeted service's functions are executed.
+
+```bash
+# Before: Variables leaked between service evaluations
+for entry in "${SERVICES[@]}"; do
+  eval "$entry" # Variables from all services overwrote each other
+  if [[ "$target" == "$name" ]]; then
+    "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}" "${setup:-}"
+  fi
+done
+
+# After: Variables isolated per service
+for entry in "${SERVICES[@]}"; do
+  if (
+    eval "$entry" # Variables isolated in subshell
+    if [[ "$target" == "all" || "$target" == "$name" ]]; then
+      "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}" "${setup:-}"
+      exit 0
+    else
+      exit 1
+    fi
+  ); then
+    handled=true
+  fi
+done
+```
+
+**Impact**: 
+- ✅ Single service installs now work correctly
+- ✅ No unwanted directories are created
+- ✅ Proper setup/post functions are executed for the target service only
+
+### Fixed: VAmPI Build Issues
+
+**Issue**: VAmPI installation failed with "No such image: vampi-vampi-vulnerable:latest" because Docker images needed to be built locally but the build process occurred after container startup was attempted.
+
+**Root Cause**: The `.allow_build` file was created in `vampi_post()` (runs after containers start) instead of during the setup phase (runs before build).
+
+**Fix**: Added `vampi_setup()` function to create `.allow_build` file before the build process:
+
+```bash
+# Added to SERVICES array:
+"name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post setup=vampi_setup"
+
+# New setup function runs before build:
+vampi_setup() {
+  local dir="$BASE_DIR/vampi"
+  touch "$dir/.allow_build"  # Created before build attempt
+  # Additional compose file cleanup
+}
+```
+
+**Impact**:
+- ✅ VAmPI builds and starts successfully
+- ✅ Both vampi-secure and vampi-vulnerable containers work
+- ✅ Proper Docker image building workflow
+
+### Verification
+
+To verify the fixes work correctly:
+
+```bash
+# Test 1: Single service install (should only create lab-dashboard directory)
+sudo ./manage_vuln_services.sh install lab-dashboard
+ls /opt/lab/  # Should show only: lab-dashboard/
+
+# Test 2: VAmPI build success (should build and start containers)
+sudo ./manage_vuln_services.sh install vampi
+docker compose -f /opt/lab/vampi/docker-compose.yaml ps  # Should show running containers
+```
 
 ## Security posture and safe use
 
