@@ -404,6 +404,11 @@ vampi_setup() {
 - ✅ Both vampi-secure and vampi-vulnerable containers work
 - ✅ Proper Docker image building workflow
 
+### VAmPI port normalization and vampi-init
+
+- **vampi-init** is a one-shot container (`restart: "no"`) that waits for `vampi-vulnerable`, calls `/createdb`, and exits. **Exited (0)** is success; the container is not meant to stay running.
+- Port normalization in `vampi_post` now handles both quoted and unquoted YAML port mappings (e.g. `5002:5000` from upstream), so the vulnerable service is mapped to **8086** and the secure service to **8093** on the host. If you already have VAmPI installed with wrong ports, run `./manage_vuln_services.sh update vampi` (after pulling this fix), then restart the VAmPI stack so the corrected ports apply.
+
 ### Verification
 
 To verify the fixes work correctly:

@@ -294,22 +294,20 @@ vampi_post() {
     # First, check if both services exist and are trying to use the same port
     if grep -q "vampi-secure:" "$compose_file" && grep -q "vampi-vulnerable:" "$compose_file"; then
       # Use port 8086 for vulnerable (main service) and 8093 for secure
-      if grep -qE ':5000"' "$compose_file"; then
-        # Update vulnerable service to use port 8086
-        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^(\s*)-\s*"([0-9]{2,5}):5000"/\1- "8086:5000"/g' "$compose_file" || true
-        # Update secure service to use port 8093
-        sed -E -i '/vampi-secure:/,/environment:/ s/^(\s*)-\s*"([0-9]{2,5}):5000"/\1- "8093:5000"/g' "$compose_file" || true
+      # Match both quoted ("5002:5000") and unquoted (5002:5000) YAML port mappings
+      if grep -qE ':5000["\s]' "$compose_file"; then
+        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- 8086:5000/g' "$compose_file" || true
+        sed -E -i '/vampi-secure:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- 8093:5000/g' "$compose_file" || true
       else
-        # Fallback for :80 ports
-        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "8086:80"/g' "$compose_file" || true
-        sed -E -i '/vampi-secure:/,/environment:/ s/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "8093:80"/g' "$compose_file" || true
+        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- 8086:80/g' "$compose_file" || true
+        sed -E -i '/vampi-secure:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- 8093:80/g' "$compose_file" || true
       fi
     else
-      # Single service - use standard port mapping
-      if grep -qE ':5000"' "$compose_file"; then
-        sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):5000"/\1- "${VAMPI_PORT:-8086}:5000"/g' "$compose_file" || true
+      # Single service - use standard port mapping (match quoted and unquoted)
+      if grep -qE ':5000["\s]' "$compose_file"; then
+        sed -E -i 's/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- "${VAMPI_PORT:-8086}:5000"/g' "$compose_file" || true
       else
-        sed -E -i 's/^(\s*)-\s*"([0-9]{2,5}):80"/\1- "${VAMPI_PORT:-8086}:80"/g' "$compose_file" || true
+        sed -E -i 's/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- "${VAMPI_PORT:-8086}:80"/g' "$compose_file" || true
       fi
     fi
   fi
