@@ -1669,6 +1669,9 @@ install_or_update_service() {
     fi
   fi
 
+  # VAmPI: run post before compose up so port normalization (8086/8093) is applied before containers start
+  if [[ "$name" == "vampi" && -n "$post" ]]; then "$post"; fi
+
   log INFO "Pulling images and starting $name"
   if [[ -f "$dir/.force_pull" ]]; then
     # Services that require force pull (like crAPI with build issues)
