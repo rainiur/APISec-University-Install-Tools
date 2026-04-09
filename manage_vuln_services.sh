@@ -941,10 +941,6 @@ setup_lab_dashboard() {
   ensure_dir "$dir"
   write_env_port "$dir" DASHBOARD_PORT 80
   
-  # Get the server's IP address
-  local server_ip
-  server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
-  
   # Create HTML dashboard
   cat >"$dir/index.html" <<EOF
 <!DOCTYPE html>
@@ -1085,6 +1081,17 @@ setup_lab_dashboard() {
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
     </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const host = window.location.hostname;
+            document.querySelectorAll('a[data-port]').forEach(function(link) {
+                const scheme = link.dataset.scheme || 'http';
+                const port = link.dataset.port;
+                const path = link.dataset.path || '';
+                link.href = scheme + '://' + host + ':' + port + path;
+            });
+        });
+    </script>
 </head>
 <body>
     <div class="container">
@@ -1100,7 +1107,7 @@ setup_lab_dashboard() {
                     <h3>crAPI</h3>
                     <div class="port">Port: 8888/8444</div>
                     <p>Completely Ridiculous API - A vulnerable API designed for learning API security concepts including authentication, authorization, and data validation vulnerabilities.</p>
-                    <a href="http://${server_ip}:8888" target="_blank" class="access-btn">Access crAPI</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8888">Access crAPI</a>
                     <br><a href="https://github.com/OWASP/crAPI" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1108,7 +1115,7 @@ setup_lab_dashboard() {
                      <h3>VAmPI</h3>
                      <div class="port">Port: 8086</div>
                      <p>Vulnerable API - A deliberately vulnerable API built with Flask to demonstrate common API security issues and attack vectors.</p>
-                     <a href="http://${server_ip}:8086/ui/" target="_blank" class="access-btn">Access VAmPI Swagger UI</a>
+                     <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8086" data-path="/ui/">Access VAmPI Swagger UI</a>
                      <br><a href="https://github.com/erev0s/VAmPI" target="_blank" class="external-link">GitHub</a>
                  </div>
                 
@@ -1116,7 +1123,7 @@ setup_lab_dashboard() {
                     <h3>VAPI</h3>
                     <div class="port">Port: 8000</div>
                     <p>Vulnerable API - A Laravel-based vulnerable API designed for testing various security vulnerabilities in web APIs.</p>
-                    <a href="http://${server_ip}:8000/vapi/" target="_blank" class="access-btn">Access VAPI</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8000" data-path="/vapi/">Access VAPI</a>
                     <br><a href="https://github.com/roottusk/vapi" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1124,7 +1131,7 @@ setup_lab_dashboard() {
                     <h3>DVGA</h3>
                     <div class="port">Port: 5013</div>
                     <p>Damn Vulnerable GraphQL Application - A vulnerable GraphQL API designed for learning GraphQL security testing.</p>
-                    <a href="http://${server_ip}:5013" target="_blank" class="access-btn">Access DVGA</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="5013">Access DVGA</a>
                     <br><a href="https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application" target="_blank" class="external-link">GitHub</a>
                 </div>
             </div>
@@ -1137,7 +1144,7 @@ setup_lab_dashboard() {
                     <h3>DVWA</h3>
                     <div class="port">Port: 8081</div>
                     <p>Damn Vulnerable Web Application - A PHP/MySQL web application that is deliberately vulnerable for learning web application security.</p>
-                    <a href="http://${server_ip}:8081" target="_blank" class="access-btn">Access DVWA</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8081">Access DVWA</a>
                     <br><a href="https://github.com/digininja/DVWA" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1145,7 +1152,7 @@ setup_lab_dashboard() {
                     <h3>bWAPP</h3>
                     <div class="port">Port: 8082</div>
                     <p>Buggy Web Application - A PHP application with over 100 web vulnerabilities for learning and practicing web security.</p>
-                    <a href="http://${server_ip}:8082" target="_blank" class="access-btn">Access bWAPP</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8082">Access bWAPP</a>
                     <br><a href="http://www.itsecgames.com/" target="_blank" class="external-link">Website</a>
                 </div>
                 
@@ -1153,7 +1160,7 @@ setup_lab_dashboard() {
                     <h3>XVWA</h3>
                     <div class="port">Port: 8085</div>
                     <p>Xtreme Vulnerable Web Application - A vulnerable web application designed for learning web application security testing.</p>
-                    <a href="http://${server_ip}:8085/xvwa" target="_blank" class="access-btn">Access XVWA</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8085">Access XVWA</a>
                     <br><a href="https://hub.docker.com/r/bitnetsecdave/xvwa" target="_blank" class="external-link">Docker Hub</a>
                 </div>
                 
@@ -1161,7 +1168,7 @@ setup_lab_dashboard() {
                     <h3>Mutillidae</h3>
                     <div class="port">Port: 8088</div>
                     <p>OWASP Mutillidae - A deliberately vulnerable web application with numerous vulnerabilities for learning web security.</p>
-                    <a href="http://${server_ip}:8088" target="_blank" class="access-btn">Access Mutillidae</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8088">Access Mutillidae</a>
                     <br><a href="https://github.com/OWASP/Mutillidae-II" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1169,7 +1176,7 @@ setup_lab_dashboard() {
                     <h3>DVWS</h3>
                     <div class="port">Port: 8087</div>
                     <p>Damn Vulnerable Web Services - A vulnerable web services application for learning web service security testing.</p>
-                    <a href="http://${server_ip}:8087" target="_blank" class="access-btn">Access DVWS</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8087">Access DVWS</a>
                     <br><a href="https://github.com/snoopysecurity/dvws" target="_blank" class="external-link">GitHub</a>
                 </div>
             </div>
@@ -1180,9 +1187,9 @@ setup_lab_dashboard() {
             <div class="grid">
                 <div class="card">
                     <h3>Security Shepherd</h3>
-                    <div class="port">Port: 8083/8443</div>
+                    <div class="port">Port: 8083/8445</div>
                     <p>OWASP Security Shepherd - A web and mobile application security training platform with various security challenges.</p>
-                    <a href="https://${server_ip}:8443" target="_blank" class="access-btn">Access Security Shepherd (HTTPS)</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="https" data-port="8445">Access Security Shepherd (HTTPS)</a>
                     <br><a href="https://github.com/OWASP/SecurityShepherd" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1190,7 +1197,7 @@ setup_lab_dashboard() {
                     <h3>WebGoat</h3>
                     <div class="port">Port: 8080</div>
                     <p>OWASP WebGoat - A deliberately insecure web application maintained by OWASP for learning web application security.</p>
-                    <a href="http://${server_ip}:8080" target="_blank" class="access-btn">Access WebGoat</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8080">Access WebGoat</a>
                     <br><a href="https://github.com/WebGoat/WebGoat" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1198,7 +1205,7 @@ setup_lab_dashboard() {
                     <h3>Juice Shop</h3>
                     <div class="port">Port: 3000</div>
                     <p>OWASP Juice Shop - A modern vulnerable web application written in Node.js and Angular for learning web security.</p>
-                    <a href="http://${server_ip}:3000" target="_blank" class="access-btn">Access Juice Shop</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="3000">Access Juice Shop</a>
                     <br><a href="https://github.com/juice-shop/juice-shop" target="_blank" class="external-link">GitHub</a>
                 </div>
                 
@@ -1206,7 +1213,7 @@ setup_lab_dashboard() {
                     <h3>Pixi</h3>
                     <div class="port">Port: 18000</div>
                     <p>Pixi - A vulnerable application for learning various security concepts and attack techniques.</p>
-                    <a href="http://${server_ip}:18000" target="_blank" class="access-btn">Access Pixi</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="18000">Access Pixi</a>
                     <br><a href="https://github.com/DevSlop/Pixi" target="_blank" class="external-link">GitHub</a>
                 </div>
             </div>
