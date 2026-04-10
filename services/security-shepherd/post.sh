@@ -16,7 +16,7 @@ security_shepherd_post_impl() {
 
   # Set HTTP and HTTPS ports to fixed values.
   local http_port="8083"
-  local https_port="18445"
+  local https_port="8445"
 
   if grep -q '^HTTP_PORT=' "$env_file"; then
     sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"

@@ -6,6 +6,7 @@ setup_mutillidae_impl() {
   local dir="$BASE_DIR/mutillidae"
   ensure_dir "$dir"
   write_env_port "$dir" MUTILLIDAE_PORT 8088
+  write_env_port "$dir" MUTILLIDAE_HTTPS_PORT 18088
 
   # Clone the official mutillidae-docker repository
   if [[ ! -d "$dir/mutillidae-docker" ]]; then
@@ -32,7 +33,7 @@ services:
     image: webpwnized/mutillidae:www
     ports:
       - "\${MUTILLIDAE_PORT:-8088}:80"
-      - "\${MUTILLIDAE_HTTPS_PORT:-8445}:443"
+      - "${MUTILLIDAE_HTTPS_PORT:-18088}:443"
     networks:
       - datanet
     restart: unless-stopped

@@ -46,7 +46,7 @@ security_shepherd_setup_impl() {
     sed -i 's/^TEST_MYSQL_PORT=.*/TEST_MYSQL_PORT=3307/' "$env_file"
     # Also ensure HTTP and HTTPS ports are set to avoid defaults
     sed -i 's/^HTTP_PORT=.*/HTTP_PORT=8083/' "$env_file"
-    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=18445/' "$env_file"
+    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=8445/' "$env_file"
   fi
 
   # Ensure docker build context includes generated target artifacts.
