@@ -13,6 +13,9 @@
 set -Eeuo pipefail
 trap 'echo "[$(date -u +%FT%TZ)] ERROR at line $LINENO" >&2' ERR
 
+# Resolve script directory once so module paths remain valid after cd operations.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ---------- logging ----------
 log() { printf '%s %-5s %s\n' "$(date -u +%FT%TZ)" "$1" "$2"; } # level, message
 
@@ -58,7 +61,7 @@ write_env_port() { # write or ensure PORT env var in .env
 
 # Security Shepherd post-setup (runs after containers start)
 security_shepherd_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/security-shepherd/post.sh"
+  local module_file="$SCRIPT_DIR/services/security-shepherd/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -70,7 +73,7 @@ security_shepherd_post() {
 
 # Fix crAPI gateway healthcheck and handle Docker build issues
 crapi_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/crapi/post.sh"
+  local module_file="$SCRIPT_DIR/services/crapi/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -82,7 +85,7 @@ crapi_post() {
 
 # Fix WebGoat healthcheck (curl missing); use wget
 webgoat_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/webgoat/post.sh"
+  local module_file="$SCRIPT_DIR/services/webgoat/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -94,7 +97,7 @@ webgoat_post() {
 
 # Pixi post-setup (runs after containers start) - most configuration now handled by pixi_setup
 pixi_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/pixi/post.sh"
+  local module_file="$SCRIPT_DIR/services/pixi/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -106,7 +109,7 @@ pixi_post() {
 
 # Early setup for VAmPI to create .allow_build before build process
 vampi_setup() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/vampi/setup.sh"
+  local module_file="$SCRIPT_DIR/services/vampi/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -118,7 +121,7 @@ vampi_setup() {
 
 # Normalize VAmPI to host 8086; prefer container 5000 if present, else 80
 vampi_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/vampi/post.sh"
+  local module_file="$SCRIPT_DIR/services/vampi/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -130,7 +133,7 @@ vampi_post() {
 
 # Normalize DVWS to host 8087 (container 80)
 dvws_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/dvws/post.sh"
+  local module_file="$SCRIPT_DIR/services/dvws/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -155,7 +158,7 @@ expose_ports_in_compose() {
 
 # ---------- built-in setups ----------
 setup_juice_shop() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/juice-shop/setup.sh"
+  local module_file="$SCRIPT_DIR/services/juice-shop/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -166,7 +169,7 @@ setup_juice_shop() {
 }
 
 setup_dvga() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/dvga/setup.sh"
+  local module_file="$SCRIPT_DIR/services/dvga/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -177,7 +180,7 @@ setup_dvga() {
 }
 
 setup_webgoat() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/webgoat/setup.sh"
+  local module_file="$SCRIPT_DIR/services/webgoat/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -188,7 +191,7 @@ setup_webgoat() {
 }
 
 setup_dvwa() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/dvwa/setup.sh"
+  local module_file="$SCRIPT_DIR/services/dvwa/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -199,7 +202,7 @@ setup_dvwa() {
 }
 
 setup_bwapp() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/bwapp/setup.sh"
+  local module_file="$SCRIPT_DIR/services/bwapp/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -210,7 +213,7 @@ setup_bwapp() {
 }
 
 setup_xvwa() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/xvwa/setup.sh"
+  local module_file="$SCRIPT_DIR/services/xvwa/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -221,7 +224,7 @@ setup_xvwa() {
 }
 
 setup_mutillidae() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/mutillidae/setup.sh"
+  local module_file="$SCRIPT_DIR/services/mutillidae/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -233,7 +236,7 @@ setup_mutillidae() {
 
 # Post-setup function for Mutillidae to initialize database
 mutillidae_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/mutillidae/post.sh"
+  local module_file="$SCRIPT_DIR/services/mutillidae/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -244,7 +247,7 @@ mutillidae_post() {
 }
 
 setup_dvws() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/dvws/setup.sh"
+  local module_file="$SCRIPT_DIR/services/dvws/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -256,7 +259,7 @@ setup_dvws() {
 
 # Early setup for vAPI to create .allow_build and fix warnings before build process
 vapi_setup() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/vapi/setup.sh"
+  local module_file="$SCRIPT_DIR/services/vapi/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -268,7 +271,7 @@ vapi_setup() {
 
 # Early setup for Security Shepherd to fix image references before build process  
 security_shepherd_setup() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/security-shepherd/setup.sh"
+  local module_file="$SCRIPT_DIR/services/security-shepherd/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -280,7 +283,7 @@ security_shepherd_setup() {
 
 # Early setup for Pixi to create .allow_build and fix port conflicts before build process
 pixi_setup() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/pixi/setup.sh"
+  local module_file="$SCRIPT_DIR/services/pixi/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -291,7 +294,7 @@ pixi_setup() {
 }
 
 setup_lab_dashboard() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/lab-dashboard/setup.sh"
+  local module_file="$SCRIPT_DIR/services/lab-dashboard/setup.sh"
   if [[ ! -f "$module_file" ]]; then
   log ERROR "Missing module: $module_file"
   return 1
@@ -302,7 +305,7 @@ setup_lab_dashboard() {
 }
 
 vapi_post() {
-  local module_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/services/vapi/post.sh"
+  local module_file="$SCRIPT_DIR/services/vapi/post.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
     return 1
@@ -341,6 +344,10 @@ install_or_update_service() {
     git)
       local lockfile="$dir/.locked_ref"
       if [[ -d "$dir/.git" ]]; then
+        if [[ -f "$dir/.git/index.lock" ]]; then
+          log WARN "Removing stale git lock for $name"
+          rm -f "$dir/.git/index.lock"
+        fi
         if [[ ${ACTION:=install} == update ]]; then
           log INFO "Updating git repo for $name"; (cd "$dir" && git fetch --all --tags --prune && git pull --ff-only)
           (cd "$dir" && git rev-parse HEAD) >"$lockfile"
