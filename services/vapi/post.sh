@@ -28,6 +28,10 @@ vapi_post_impl() {
     ' "$dir/docker-compose.yml" > "$dir/docker-compose.yml.__tmp" && mv "$dir/docker-compose.yml.__tmp" "$dir/docker-compose.yml" || true
   fi
 
+  # Remove stale containers from previous incompatible compose runs.
+  # This prevents name conflicts like "/vapi-db-1 is already in use".
+  docker rm -f vapi-db-1 vapi-www-1 vapi-phpmyadmin-1 >/dev/null 2>&1 || true
+
   # Ensure remaining database variables are set
   local env_file="$dir/.env"
   touch "$env_file"

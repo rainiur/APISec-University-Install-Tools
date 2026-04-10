@@ -48,6 +48,10 @@ security_shepherd_post_impl() {
   # Ensure TEST_MYSQL_PORT also uses the remapped port
   sed -i 's/^TEST_MYSQL_PORT=.*/TEST_MYSQL_PORT=3307/' "$env_file" 2>/dev/null || echo 'TEST_MYSQL_PORT=3307' >> "$env_file"
 
+  # Remove stale containers from earlier compose definitions to prevent
+  # host port and naming conflicts during subsequent starts.
+  docker rm -f secshep_tomcat secshep_mariadb secshep_mongo >/dev/null 2>&1 || true
+
   # Note: Maven build and .allow_build creation are now handled by security_shepherd_setup function
   log INFO "Security Shepherd post-setup completed"
 }

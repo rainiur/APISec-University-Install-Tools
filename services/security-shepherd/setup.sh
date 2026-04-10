@@ -76,6 +76,27 @@ security_shepherd_setup_impl() {
       if [[ -f "target/classes/mongodb/moduleSchemas.js" ]]; then
         cp "target/classes/mongodb/moduleSchemas.js" "target/moduleSchemas.js"
       fi
+      # Some upstream revisions place generated files in alternate paths.
+      # Try a best-effort search fallback so Docker COPY paths always exist.
+      if [[ ! -f "target/coreSchema.sql" ]]; then
+        local found_core
+        found_core="$(find target -type f -name 'coreSchema.sql' | head -n 1 || true)"
+        [[ -n "$found_core" ]] && cp "$found_core" "target/coreSchema.sql"
+      fi
+      if [[ ! -f "target/moduleSchemas.sql" ]]; then
+        local found_module_sql
+        found_module_sql="$(find target -type f -name 'moduleSchemas.sql' | head -n 1 || true)"
+        [[ -n "$found_module_sql" ]] && cp "$found_module_sql" "target/moduleSchemas.sql"
+      fi
+      if [[ ! -f "target/moduleSchemas.js" ]]; then
+        local found_module_js
+        found_module_js="$(find target -type f -name 'moduleSchemas.js' | head -n 1 || true)"
+        [[ -n "$found_module_js" ]] && cp "$found_module_js" "target/moduleSchemas.js"
+      fi
+      if [[ ! -f "target/coreSchema.sql" || ! -f "target/moduleSchemas.sql" || ! -f "target/moduleSchemas.js" ]]; then
+        log ERROR "Required Security Shepherd build artifacts missing in target/ (coreSchema.sql, moduleSchemas.sql, moduleSchemas.js)."
+        return 1
+      fi
       log INFO "Schema files copied to target/ root for Docker build"
     else
       log ERROR "Maven build failed. Security Shepherd requires a successful Maven build before Docker build."
