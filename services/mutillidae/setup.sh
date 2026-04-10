@@ -87,7 +87,7 @@ networks:
 EOF
 
   # Set additional environment variables
-  write_env_port "$dir" MUTILLIDAE_HTTPS_PORT 8445
+  write_env_port "$dir" MUTILLIDAE_HTTPS_PORT 18088
   write_env_port "$dir" MUTILLIDAE_ADMIN_PORT 8089
   write_env_port "$dir" MUTILLIDAE_LDAP_ADMIN_PORT 8090
 }
