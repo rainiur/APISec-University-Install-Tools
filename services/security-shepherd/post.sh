@@ -14,9 +14,9 @@ security_shepherd_post_impl() {
   local env_file="$dir/.env"
   touch "$env_file"
 
-  # Set HTTP and HTTPS ports to fixed values (8445 to avoid conflict with crAPI on 8443)
+  # Set HTTP and HTTPS ports to fixed values.
   local http_port="8083"
-  local https_port="8445"
+  local https_port="18445"
 
   if grep -q '^HTTP_PORT=' "$env_file"; then
     sed -i "s/^HTTP_PORT=.*/HTTP_PORT=${http_port}/" "$env_file"

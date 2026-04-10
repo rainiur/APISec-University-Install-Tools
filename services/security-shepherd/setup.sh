@@ -46,7 +46,16 @@ security_shepherd_setup_impl() {
     sed -i 's/^TEST_MYSQL_PORT=.*/TEST_MYSQL_PORT=3307/' "$env_file"
     # Also ensure HTTP and HTTPS ports are set to avoid defaults
     sed -i 's/^HTTP_PORT=.*/HTTP_PORT=8083/' "$env_file"
-    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=8445/' "$env_file"
+    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=18445/' "$env_file"
+  fi
+
+  # Ensure docker build context includes generated target artifacts.
+  local dockerignore_file="$dir/.dockerignore"
+  if [[ -f "$dockerignore_file" ]]; then
+    grep -q '^!target/$' "$dockerignore_file" || echo '!target/' >> "$dockerignore_file"
+    grep -q '^!target/coreSchema.sql$' "$dockerignore_file" || echo '!target/coreSchema.sql' >> "$dockerignore_file"
+    grep -q '^!target/moduleSchemas.sql$' "$dockerignore_file" || echo '!target/moduleSchemas.sql' >> "$dockerignore_file"
+    grep -q '^!target/moduleSchemas.js$' "$dockerignore_file" || echo '!target/moduleSchemas.js' >> "$dockerignore_file"
   fi
 
   # Security Shepherd requires Maven build to generate target/ files before Docker build
