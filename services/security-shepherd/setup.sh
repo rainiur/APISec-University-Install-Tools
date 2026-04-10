@@ -48,9 +48,8 @@ security_shepherd_setup_impl() {
     sed -i 's/^HTTP_PORT=.*/HTTP_PORT=8083/' "$env_file"
     sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=8445/' "$env_file"
 
-    # Remap the HTTPS_PORT line in docker-compose.yml to Tomcat HTTP (8080)
-    # so both ports serve plain HTTP (no TLS termination needed at the container level)
-    sed -i 's/- \$HTTPS_PORT:8443/- $HTTPS_PORT:8080/' "$dir/docker-compose.yml" || true
+    # Ensure HTTPS_PORT maps to Tomcat HTTPS (8443)
+    sed -i 's/- \$HTTPS_PORT:8080/- $HTTPS_PORT:8443/' "$dir/docker-compose.yml" || true
   fi
 
   # Ensure docker build context includes generated target artifacts.

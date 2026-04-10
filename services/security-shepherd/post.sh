@@ -15,7 +15,6 @@ security_shepherd_post_impl() {
   touch "$env_file"
 
   # Set HTTP and HTTPS ports to fixed values.
-  # Both ports map to Tomcat HTTP (8080) — no HTTPS at container level.
   local http_port="8083"
   local https_port="8445"
 
