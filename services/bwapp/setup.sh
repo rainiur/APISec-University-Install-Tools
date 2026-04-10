@@ -19,6 +19,13 @@ RUN chmod +x /start.sh
 CMD ["/start.sh"]
 EOF
 
+  # Also patch /start-apache2.sh in the Dockerfile to clear stale PID file
+  cat >>"$dir/Dockerfile" <<'DEOF'
+
+# Patch upstream start-apache2.sh to remove stale PID before launching
+RUN sed -i '2i rm -f /var/run/apache2/apache2.pid' /start-apache2.sh
+DEOF
+
   # Create startup script
   cat >"$dir/start.sh" <<'EOF'
 #!/bin/bash
