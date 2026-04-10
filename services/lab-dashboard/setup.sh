@@ -253,9 +253,9 @@ setup_lab_dashboard_impl() {
             <div class="grid">
                 <div class="card">
                     <h3>Security Shepherd</h3>
-                    <div class="port">Port: 8083/8445</div>
+                    <div class="port">Port: 8083</div>
                     <p>OWASP Security Shepherd - A web and mobile application security training platform with various security challenges.</p>
-                    <a href="#" target="_blank" class="access-btn" data-scheme="https" data-port="8445">Access Security Shepherd (HTTPS)</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8083">Access Security Shepherd</a>
                     <br><a href="https://github.com/OWASP/SecurityShepherd" target="_blank" class="external-link">GitHub</a>
                 </div>
 
