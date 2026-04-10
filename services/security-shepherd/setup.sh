@@ -22,6 +22,9 @@ security_shepherd_setup_impl() {
     sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
   fi
 
+  # Remove stale containers from earlier installs to prevent port/name conflicts on compose up.
+  docker rm -f secshep_tomcat secshep_mariadb secshep_mongo >/dev/null 2>&1 || true
+
   # Create/update .env with proper image overrides
   local env_file="$dir/.env"
   touch "$env_file"
