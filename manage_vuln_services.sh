@@ -354,7 +354,13 @@ install_or_update_service() {
         else
           # Honor existing lock
           if [[ -f "$lockfile" ]]; then
-            local ref; ref="$(cat "$lockfile")"; log INFO "Checking out locked ref $ref for $name"; (cd "$dir" && git checkout -q "$ref" || true)
+            local ref
+            ref="$(cat "$lockfile")"
+            log INFO "Checking out locked ref $ref for $name"
+            # Reconcile repositories that have tracked files staged/removed from prior interrupted runs.
+            (cd "$dir" && git reset --hard HEAD >/dev/null 2>&1 || true)
+            (cd "$dir" && git clean -fd >/dev/null 2>&1 || true)
+            (cd "$dir" && git checkout -q -f "$ref" || true)
           fi
         fi
       else
@@ -399,6 +405,15 @@ install_or_update_service() {
 
   # VAmPI: run post before compose up so port normalization (8086/8093) is applied before containers start
   if [[ "$name" == "vampi" && -n "$post" ]]; then "$post"; fi
+
+  local compose_file="$dir/docker-compose.yml"
+  if [[ ! -f "$compose_file" && -f "$dir/docker-compose.yaml" ]]; then
+    compose_file="$dir/docker-compose.yaml"
+  fi
+  if [[ ! -f "$compose_file" ]]; then
+    log ERROR "No docker compose file found for $name in $dir"
+    return 1
+  fi
 
   log INFO "Pulling images and starting $name"
   if [[ -f "$dir/.force_pull" ]]; then
