@@ -361,3 +361,21 @@ EOF
 
   # Note: .allow_build file is created by vapi_setup function before build process
 }
+
+# Lightweight runtime health check for vAPI after containers are started.
+vapi_health_check_impl() {
+  local base_url="${1:-http://localhost:8000}"
+  local root_code api_code
+
+  root_code="$(curl -s -o /dev/null -w '%{http_code}' "${base_url}/" 2>/dev/null || echo 000)"
+  api_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base_url}/vapi/api4/login" 2>/dev/null || echo 000)"
+
+  if [[ "$root_code" == "200" && "$api_code" =~ ^(200|400|401|422)$ ]]; then
+    log INFO "vAPI health check passed (root=${root_code}, api4_login=${api_code})"
+    return 0
+  fi
+
+  log WARN "vAPI health check failed (root=${root_code}, api4_login=${api_code})"
+  log WARN "Check vAPI logs: docker logs vapi-www-1 --tail 100"
+  return 1
+}

@@ -315,6 +315,17 @@ vapi_post() {
   vapi_post_impl
 }
 
+vapi_health_check() {
+  local module_file="$SCRIPT_DIR/services/vapi/post.sh"
+  if [[ ! -f "$module_file" ]]; then
+    log ERROR "Missing module: $module_file"
+    return 1
+  fi
+  # shellcheck source=/dev/null
+  source "$module_file"
+  vapi_health_check_impl "http://localhost:${VAPI_PORT:-8000}"
+}
+
 # ---------- core actions ----------
 install_or_update_service() {
   local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"; local setup="${6:-}"
@@ -491,7 +502,15 @@ for_each_service() {
 
 # Wrappers for for_each_service with appropriate function signature
 install_update_wrapper() { install_or_update_service "$@"; }
-start_wrapper()          { local name="$1"; shift 5 || true; start_service "$name"; }
+start_wrapper() {
+  local name="$1"
+  start_service "$name"
+
+  # Run lightweight vAPI runtime check after start without impacting other services.
+  if [[ "$name" == "vapi" ]]; then
+    vapi_health_check || true
+  fi
+}
 stop_wrapper()           { local name="$1"; shift 5 || true; stop_service "$name"; }
 clean_wrapper()          { local name="$1"; shift 5 || true; clean_service "$name"; }
 uninstall_wrapper()      { local name="$1"; clean_service "$name"; }
