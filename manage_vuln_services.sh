@@ -359,7 +359,7 @@ install_or_update_service() {
             log INFO "Checking out locked ref $ref for $name"
             # Reconcile repositories that have tracked files staged/removed from prior interrupted runs.
             (cd "$dir" && git reset --hard HEAD >/dev/null 2>&1 || true)
-            (cd "$dir" && git clean -fd >/dev/null 2>&1 || true)
+            (cd "$dir" && git clean -fdx >/dev/null 2>&1 || true)
             (cd "$dir" && git checkout -q -f "$ref" || true)
           fi
         fi
