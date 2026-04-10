@@ -55,3 +55,57 @@ security_shepherd_post_impl() {
   # Note: Maven build and .allow_build creation are now handled by security_shepherd_setup function
   log INFO "Security Shepherd post-setup completed"
 }
+
+# DB initialisation: run after containers are up to fix the hostname in
+# database.properties and import the schema SQL if the core DB is empty.
+security_shepherd_db_init_impl() {
+  local dir="$BASE_DIR/security-shepherd"
+  local mariadb_container="secshep_mariadb"
+  local tomcat_container="secshep_tomcat"
+  local db_pass
+  db_pass="$(grep '^DB_PASS=' "$dir/.env" 2>/dev/null | cut -d= -f2)"
+  db_pass="${db_pass:-CowSaysMoo}"
+
+  log INFO "Security Shepherd: waiting for MariaDB to accept connections..."
+  local attempts=0
+  until docker exec "$mariadb_container" sh -c \
+      "mysql -u root -p'${db_pass}' -e 'SELECT 1' >/dev/null 2>&1"; do
+    attempts=$(( attempts + 1 ))
+    if [[ $attempts -ge 30 ]]; then
+      log ERROR "Security Shepherd: MariaDB did not become ready in time"
+      return 1
+    fi
+    sleep 2
+  done
+  log INFO "Security Shepherd: MariaDB is ready"
+
+  # --- Fix database.properties hostname (pre-built image uses wrong name) ---
+  docker exec "$tomcat_container" sh -c \
+    "sed -i 's|secshep_mysql|${mariadb_container}|g' /usr/local/tomcat/conf/database.properties" \
+    2>/dev/null || true
+  log INFO "Security Shepherd: database.properties hostname patched to ${mariadb_container}"
+
+  # --- Import schema SQL files if 'core' DB has no tables yet ---
+  local table_count
+  table_count="$(docker exec "$mariadb_container" sh -c \
+    "mysql -u root -p'${db_pass}' -e \
+      'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=\"core\";' \
+      2>/dev/null | tail -1" || echo 0)"
+
+  if [[ "${table_count:-0}" -eq 0 ]]; then
+    log INFO "Security Shepherd: importing coreSchema.sql..."
+    docker exec -i "$mariadb_container" sh -c "mysql -u root -p'${db_pass}' 2>/dev/null" \
+      < "$dir/target/coreSchema.sql" || true
+    log INFO "Security Shepherd: importing moduleSchemas.sql..."
+    docker exec -i "$mariadb_container" sh -c "mysql -u root -p'${db_pass}' 2>/dev/null" \
+      < "$dir/target/moduleSchemas.sql" || true
+    log INFO "Security Shepherd: schema import done"
+  else
+    log INFO "Security Shepherd: core DB already has ${table_count} tables — skipping import"
+  fi
+
+  # --- Reload Tomcat app context to pick up patched database.properties ---
+  docker exec "$tomcat_container" sh -c \
+    "touch /usr/local/tomcat/webapps/ROOT/WEB-INF/web.xml" 2>/dev/null || true
+  log INFO "Security Shepherd: Tomcat context reload triggered"
+}

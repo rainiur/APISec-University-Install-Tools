@@ -42,7 +42,7 @@ SERVICES=(
   "name=webgoat type=builtin src=setup_webgoat expose_prompt=false post=webgoat_post"
   "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
   "name=bwapp type=builtin src=setup_bwapp expose_prompt=false"
-  "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post setup=security_shepherd_setup"
+  "name=security-shepherd type=git src=https://github.com/OWASP/SecurityShepherd.git expose_prompt=false post=security_shepherd_post setup=security_shepherd_setup db_init=security_shepherd_db_init"
   "name=pixi type=git src=https://github.com/DevSlop/Pixi.git expose_prompt=true post=pixi_post setup=pixi_setup"
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false post=mutillidae_post"
@@ -69,6 +69,17 @@ security_shepherd_post() {
   # shellcheck source=/dev/null
   source "$module_file"
   security_shepherd_post_impl
+}
+
+security_shepherd_db_init() {
+  local module_file="$SCRIPT_DIR/services/security-shepherd/post.sh"
+  if [[ ! -f "$module_file" ]]; then
+    log ERROR "Missing module: $module_file"
+    return 1
+  fi
+  # shellcheck source=/dev/null
+  source "$module_file"
+  security_shepherd_db_init_impl
 }
 
 # Fix crAPI gateway healthcheck and handle Docker build issues
@@ -328,7 +339,7 @@ vapi_health_check() {
 
 # ---------- core actions ----------
 install_or_update_service() {
-  local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"; local setup="${6:-}"
+  local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"; local setup="${6:-}"; local db_init="${7:-}"
   local dir="$BASE_DIR/$name"
   ensure_dir "$dir"
 
@@ -440,6 +451,9 @@ install_or_update_service() {
 
   # Optional post-setup tweaks (after containers are started)
   if [[ -n "$post" ]]; then "$post"; fi
+
+  # Optional DB initialisation (after post, waits for DB readiness)
+  if [[ -n "$db_init" ]]; then "$db_init"; fi
 }
 
 start_service() { 
@@ -484,9 +498,9 @@ for_each_service() {
   for entry in "${SERVICES[@]}"; do
     # Use a subshell to completely isolate variables and immediately execute if matched
     if (
-      eval "$entry" # defines: name type src expose_prompt [post] [setup]
+      eval "$entry" # defines: name type src expose_prompt [post] [setup] [db_init]
       if [[ "$target" == "all" || "$target" == "$name" ]]; then
-        "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}" "${setup:-}"
+        "$fn" "$name" "$type" "$src" "$expose_prompt" "${post:-}" "${setup:-}" "${db_init:-}"
         exit 0  # Signal success to parent shell
       else
         exit 1  # Signal no match to parent shell
@@ -503,16 +517,19 @@ for_each_service() {
 # Wrappers for for_each_service with appropriate function signature
 install_update_wrapper() { install_or_update_service "$@"; }
 start_wrapper() {
-  local name="$1"
+  local name="$1"; local db_init="${7:-}"
   start_service "$name"
+
+  # Run DB initialisation if defined for this service
+  if [[ -n "$db_init" ]]; then "$db_init"; fi
 
   # Run lightweight vAPI runtime check after start without impacting other services.
   if [[ "$name" == "vapi" ]]; then
     vapi_health_check || true
   fi
 }
-stop_wrapper()           { local name="$1"; shift 5 || true; stop_service "$name"; }
-clean_wrapper()          { local name="$1"; shift 5 || true; clean_service "$name"; }
+stop_wrapper()           { local name="$1"; shift 6 || true; stop_service "$name"; }
+clean_wrapper()          { local name="$1"; clean_service "$name"; }
 uninstall_wrapper()      { local name="$1"; clean_service "$name"; }
 
 # ---------- dependency bootstrap (optional) ----------
