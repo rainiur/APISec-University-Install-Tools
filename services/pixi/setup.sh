@@ -23,8 +23,8 @@ pixi_setup_impl() {
     sed -E -i 's/^(\s*)-\s*"28017:28017"/\1- "127.0.0.1:${PIXI_MONGO_HTTP_PORT:-28018}:28017"/g' "$compose_file" || true
 
     # Fix app port conflicts (vAPI uses 8000, so use 18000 for Pixi)
-    sed -E -i 's/^(\s*)-\s*"8000:8000"/\1- "127.0.0.1:${PIXI_APP_PORT:-18000}:8000"/g' "$compose_file" || true
-    sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "127.0.0.1:${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"8000:8000"/\1- "${PIXI_APP_PORT:-18000}:8000"/g' "$compose_file" || true
+    sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
   fi
 
   # Set up port configuration with non-conflicting values
