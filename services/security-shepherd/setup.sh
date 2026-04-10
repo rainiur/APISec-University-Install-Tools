@@ -109,7 +109,13 @@ security_shepherd_setup_impl() {
         log ERROR "Required Security Shepherd build artifacts missing in target/ (coreSchema.sql, moduleSchemas.sql, moduleSchemas.js)."
         return 1
       fi
-      log INFO "Schema files copied to target/ root for Docker build"
+      # Also copy into the Docker build sub-contexts (docker/mariadb/ and docker/mongo/)
+      # because those Dockerfiles use `COPY target/<file>` relative to their own context dir.
+      mkdir -p docker/mariadb/target docker/mongo/target
+      cp "target/coreSchema.sql"    docker/mariadb/target/coreSchema.sql
+      cp "target/moduleSchemas.sql" docker/mariadb/target/moduleSchemas.sql
+      cp "target/moduleSchemas.js"  docker/mongo/target/moduleSchemas.js
+      log INFO "Schema files copied to target/ root and Docker sub-context dirs for Docker build"
     else
       log ERROR "Maven build failed. Security Shepherd requires a successful Maven build before Docker build."
       return 1
