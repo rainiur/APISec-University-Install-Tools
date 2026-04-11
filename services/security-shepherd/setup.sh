@@ -144,8 +144,8 @@ EOF
       # breaks stored procedure imports under the MariaDB docker entrypoint.
       sed -i \
         -e 's/\r$//' \
-        -e 's/^-- DELIMITER /DELIMITER /' \
-        -e 's/^-- \$\$$/$$/' \
+        -e 's/^[[:space:]]*--[[:space:]]*DELIMITER /DELIMITER /' \
+        -e 's/^[[:space:]]*--[[:space:]]*\$\$$/$$/' \
         "target/coreSchema.sql" "target/moduleSchemas.sql"
       # Also copy into the Docker build sub-contexts (docker/mariadb/ and docker/mongo/)
       # because those Dockerfiles use `COPY target/<file>` relative to their own context dir.
