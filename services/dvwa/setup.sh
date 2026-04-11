@@ -14,6 +14,11 @@ setup_dvwa_impl() {
   else
     echo 'DVWA_IMAGE=ghcr.io/digininja/dvwa:latest' >> "$env_file"
   fi
+  if grep -q '^DVWA_SUBNET=' "$env_file"; then
+    sed -i 's|^DVWA_SUBNET=.*|DVWA_SUBNET=172.40.0.0/24|' "$env_file"
+  else
+    echo 'DVWA_SUBNET=172.40.0.0/24' >> "$env_file"
+  fi
 
   cat >"$dir/docker-compose.yml" <<'EOF'
 services:
@@ -45,6 +50,9 @@ services:
     restart: unless-stopped
 networks:
   dvwa:
+    ipam:
+      config:
+        - subnet: ${DVWA_SUBNET:-172.40.0.0/24}
 volumes:
   dvwa-db:
 EOF
