@@ -15,25 +15,36 @@ vampi_post_impl() {
     write_env_port "$dir" VAMPI_PORT 8086
 
     # Handle VAmPI port conflicts by using different ports for secure and vulnerable versions
-    # First, check if both services exist and are trying to use the same port
-    if grep -q "vampi-secure:" "$compose_file" && grep -q "vampi-vulnerable:" "$compose_file"; then
-      # Use port 8086 for vulnerable (main service) and 8093 for secure
-      # Match both quoted ("5002:5000") and unquoted (5002:5000) YAML port mappings
-      if grep -qE ':5000["\s]' "$compose_file"; then
-        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- 8086:5000/g' "$compose_file" || true
-        sed -E -i '/vampi-secure:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- 8093:5000/g' "$compose_file" || true
-      else
-        sed -E -i '/vampi-vulnerable:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- 8086:80/g' "$compose_file" || true
-        sed -E -i '/vampi-secure:/,/environment:/ s/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- 8093:80/g' "$compose_file" || true
-      fi
-    else
-      # Single service - use standard port mapping (match quoted and unquoted)
-      if grep -qE ':5000["\s]' "$compose_file"; then
-        sed -E -i 's/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):5000"?/\1- "${VAMPI_PORT:-8086}:5000"/g' "$compose_file" || true
-      else
-        sed -E -i 's/^([[:space:]]*)-[[:space:]]*"?([0-9]{2,5}):80"?/\1- "${VAMPI_PORT:-8086}:80"/g' "$compose_file" || true
-      fi
+    local backend_port=80
+    if grep -q ':5000' "$compose_file"; then
+      backend_port=5000
     fi
+
+    awk -v backend_port="$backend_port" '
+      /^[[:space:]]*vampi-vulnerable:[[:space:]]*$/ { svc="vuln"; in_ports=0; print; next }
+      /^[[:space:]]*vampi-secure:[[:space:]]*$/ { svc="secure"; in_ports=0; print; next }
+      /^[[:space:]]*[A-Za-z0-9_.-]+:[[:space:]]*$/ {
+        if ($0 !~ /^[[:space:]]*(vampi-vulnerable|vampi-secure):[[:space:]]*$/) {
+          svc=""
+          in_ports=0
+        }
+      }
+      svc != "" && /^[[:space:]]*ports:[[:space:]]*$/ { in_ports=1; print; next }
+      svc != "" && in_ports && /^[[:space:]]*-[[:space:]]*/ {
+        if (svc == "vuln") {
+          sub(/-[[:space:]]*"?[0-9]{2,5}:[0-9]{2,5}"?/, "- 8086:" backend_port)
+        } else if (svc == "secure") {
+          sub(/-[[:space:]]*"?[0-9]{2,5}:[0-9]{2,5}"?/, "- 8093:" backend_port)
+        }
+        in_ports=0
+        print
+        next
+      }
+      svc != "" && in_ports && $0 !~ /^[[:space:]]*$/ && $0 !~ /^[[:space:]]*#/ {
+        in_ports=0
+      }
+      { print }
+    ' "$compose_file" >"$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
   fi
 
   # Auto-populate VAmPI database after startup
