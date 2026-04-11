@@ -22,10 +22,30 @@ services:
     ports:
       - "${DVWA_PORT:-8081}:80"
     environment:
+      - DB_SERVER=db
+      - DB_USER=dvwa
+      - DB_PASSWORD=dvwa
+      - DB_DATABASE=dvwa
+    depends_on:
+      - db
+    networks:
+      - dvwa
+    restart: unless-stopped
+  db:
+    image: docker.io/library/mariadb:10
+    environment:
+      - MYSQL_ROOT_PASSWORD=dvwa
+      - MYSQL_DATABASE=dvwa
       - MYSQL_USER=dvwa
       - MYSQL_PASSWORD=dvwa
-      - MYSQL_DATABASE=dvwa
-      - MYSQL_ROOT_PASSWORD=dvwa
+    volumes:
+      - dvwa-db:/var/lib/mysql
+    networks:
+      - dvwa
     restart: unless-stopped
+networks:
+  dvwa:
+volumes:
+  dvwa-db:
 EOF
 }
