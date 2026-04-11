@@ -20,31 +20,8 @@ vampi_post_impl() {
       backend_port=5000
     fi
 
-    awk -v backend_port="$backend_port" '
-      /^[[:space:]]*vampi-vulnerable:[[:space:]]*$/ { svc="vuln"; in_ports=0; print; next }
-      /^[[:space:]]*vampi-secure:[[:space:]]*$/ { svc="secure"; in_ports=0; print; next }
-      /^[[:space:]]*[A-Za-z0-9_.-]+:[[:space:]]*$/ {
-        if ($0 !~ /^[[:space:]]*(vampi-vulnerable|vampi-secure):[[:space:]]*$/) {
-          svc=""
-          in_ports=0
-        }
-      }
-      svc != "" && /^[[:space:]]*ports:[[:space:]]*$/ { in_ports=1; print; next }
-      svc != "" && in_ports && /^[[:space:]]*-[[:space:]]*/ {
-        if (svc == "vuln") {
-          sub(/-[[:space:]]*"?[0-9]{2,5}:[0-9]{2,5}"?/, "- 8086:" backend_port)
-        } else if (svc == "secure") {
-          sub(/-[[:space:]]*"?[0-9]{2,5}:[0-9]{2,5}"?/, "- 8093:" backend_port)
-        }
-        in_ports=0
-        print
-        next
-      }
-      svc != "" && in_ports && $0 !~ /^[[:space:]]*$/ && $0 !~ /^[[:space:]]*#/ {
-        in_ports=0
-      }
-      { print }
-    ' "$compose_file" >"$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
+    sed -E -i '/^[[:space:]]*vampi-vulnerable:/,/^[[:space:]]*environment:/ s/^([[:space:]]*)-[[:space:]]*"?[0-9]+:'"$backend_port"'"?$/\1- 8086:'"$backend_port"'/' "$compose_file" || true
+    sed -E -i '/^[[:space:]]*vampi-secure:/,/^[[:space:]]*environment:/ s/^([[:space:]]*)-[[:space:]]*"?[0-9]+:'"$backend_port"'"?$/\1- 8093:'"$backend_port"'/' "$compose_file" || true
   fi
 
   # Auto-populate VAmPI database after startup
