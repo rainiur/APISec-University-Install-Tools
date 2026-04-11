@@ -341,10 +341,11 @@ vapi_health_check() {
 install_or_update_service() {
   local name="$1"; local type="$2"; local src="$3"; local expose_prompt="$4"; local post="${5:-}"; local setup="${6:-}"; local db_init="${7:-}"
   local dir="$BASE_DIR/$name"
-  ensure_dir "$dir"
+  ensure_dir "$BASE_DIR"
 
   case "$type" in
     compose_url)
+      ensure_dir "$dir"
       local compose="$dir/docker-compose.yml"; local sumfile="$dir/.compose.sha256"
       if [[ ! -f "$compose" ]]; then
         log INFO "Downloading compose for $name"
@@ -386,6 +387,10 @@ install_or_update_service() {
           fi
         fi
       else
+        if [[ -e "$dir" ]]; then
+          log INFO "Resetting $dir for fresh clone"
+          rm -rf "$dir"
+        fi
         log INFO "Cloning $name from $src"; git clone --depth 1 "$src" "$dir"
         (cd "$dir" && git rev-parse HEAD) >"$lockfile"
       fi

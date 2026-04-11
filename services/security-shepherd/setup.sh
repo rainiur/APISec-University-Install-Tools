@@ -92,6 +92,11 @@ EOF
     log INFO "Building Security Shepherd with Maven to generate required files"
     cd "$dir" || return 1
 
+    if [[ ! -f "pom.xml" ]]; then
+      log ERROR "Security Shepherd checkout is incomplete: missing pom.xml in $dir"
+      return 1
+    fi
+
     # Check if Maven is available
     if ! command -v mvn >/dev/null 2>&1; then
       log ERROR "Maven is required but not installed. Please install Maven to build Security Shepherd."
@@ -99,8 +104,8 @@ EOF
     fi
 
     # Run Maven build to generate target/ directory with required files
-    log INFO "Running Maven build to generate target/ directory files"
-    if mvn clean compile -q; then
+    log INFO "Running Maven docker profile build to generate target/ directory files"
+    if mvn -Pdocker clean install -DskipTests -q; then
       log INFO "Maven build completed successfully"
 
       # Copy generated files to locations expected by Dockerfile
