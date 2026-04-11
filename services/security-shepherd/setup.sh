@@ -13,13 +13,12 @@ security_shepherd_setup_impl() {
     # Remove obsolete version attribute from docker-compose.yml
     sed -i '/^version:/d' "$dir/docker-compose.yml" || true
 
-    # Replace non-existent OWASP images with official images
-    # Mongo: use stable 4.2 tag for broad compatibility
-    sed -E -i 's|(image:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
-    sed -E -i 's|(IMAGE_MONGO:\s*)owasp/security-shepherd_mongo|\1mongo:4.2|g' "$dir/docker-compose.yml" || true
-    # MariaDB: map to mariadb:10.6.11 to match DB_VERSION
-    sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
-    sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
+    # Replace non-existent OWASP images with official images.
+    # Track current patches within the existing compatible series.
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mongo|\1mongo:4.4|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MONGO:\s*)owasp/security-shepherd_mongo|\1mongo:4.4|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6|g' "$dir/docker-compose.yml" || true
+    sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6|g' "$dir/docker-compose.yml" || true
 
     # Avoid overlap with host LAN subnets (for example 192.168.16.0/24)
     # by pinning Security Shepherd's compose network to a safe private range.
@@ -45,14 +44,24 @@ EOF
 
   # Set image overrides to public images
   if grep -q '^IMAGE_MONGO=' "$env_file"; then
-    sed -i 's/^IMAGE_MONGO=.*/IMAGE_MONGO=mongo:4.2/' "$env_file"
+    sed -i 's/^IMAGE_MONGO=.*/IMAGE_MONGO=mongo:4.4/' "$env_file"
   else
-    echo 'IMAGE_MONGO=mongo:4.2' >> "$env_file"
+    echo 'IMAGE_MONGO=mongo:4.4' >> "$env_file"
   fi
   if grep -q '^IMAGE_MARIADB=' "$env_file"; then
-    sed -i 's/^IMAGE_MARIADB=.*/IMAGE_MARIADB=mariadb:10.6.11/' "$env_file"
+    sed -i 's/^IMAGE_MARIADB=.*/IMAGE_MARIADB=mariadb:10.6/' "$env_file"
   else
-    echo 'IMAGE_MARIADB=mariadb:10.6.11' >> "$env_file"
+    echo 'IMAGE_MARIADB=mariadb:10.6' >> "$env_file"
+  fi
+  if grep -q '^MONGODB_VERSION=' "$env_file"; then
+    sed -i 's/^MONGODB_VERSION=.*/MONGODB_VERSION=4.4/' "$env_file"
+  else
+    echo 'MONGODB_VERSION=4.4' >> "$env_file"
+  fi
+  if grep -q '^DB_VERSION=' "$env_file"; then
+    sed -i 's/^DB_VERSION=.*/DB_VERSION=10.6/' "$env_file"
+  else
+    echo 'DB_VERSION=10.6' >> "$env_file"
   fi
 
   # Set ports early and fix conflicts

@@ -37,7 +37,7 @@ SERVICES=(
   "name=crapi type=compose_url src=https://raw.githubusercontent.com/OWASP/crAPI/main/deploy/docker/docker-compose.yml expose_prompt=true post=crapi_post"
   "name=vapi type=git src=https://github.com/roottusk/vapi.git expose_prompt=false post=vapi_post setup=vapi_setup"
   "name=dvga type=builtin src=setup_dvga expose_prompt=true"
-  "name=juice-shop type=builtin src=setup_juice_shop expose_prompt=false"
+  "name=juice-shop type=git src=https://github.com/juice-shop/juice-shop.git expose_prompt=false setup=juice_shop_setup"
   # Additional vulnerable apps
   "name=webgoat type=builtin src=setup_webgoat expose_prompt=false post=webgoat_post"
   "name=dvwa type=builtin src=setup_dvwa expose_prompt=false"
@@ -47,7 +47,7 @@ SERVICES=(
   "name=xvwa type=builtin src=setup_xvwa expose_prompt=false"
   "name=mutillidae type=builtin src=setup_mutillidae expose_prompt=false post=mutillidae_post"
   "name=vampi type=git src=https://github.com/erev0s/VAmPI.git expose_prompt=false post=vampi_post setup=vampi_setup"
-  "name=dvws type=builtin src=setup_dvws expose_prompt=false"
+  "name=dvws type=git src=https://github.com/snoopysecurity/dvws-node.git expose_prompt=false post=dvws_post setup=dvws_setup"
   "name=lab-dashboard type=builtin src=setup_lab_dashboard expose_prompt=false"
 )
 
@@ -168,7 +168,7 @@ expose_ports_in_compose() {
 }
 
 # ---------- built-in setups ----------
-setup_juice_shop() {
+juice_shop_setup() {
   local module_file="$SCRIPT_DIR/services/juice-shop/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
@@ -176,7 +176,7 @@ setup_juice_shop() {
   fi
   # shellcheck source=/dev/null
   source "$module_file"
-  setup_juice_shop_impl
+  juice_shop_setup_impl
 }
 
 setup_dvga() {
@@ -257,7 +257,7 @@ mutillidae_post() {
   mutillidae_post_impl
 }
 
-setup_dvws() {
+dvws_setup() {
   local module_file="$SCRIPT_DIR/services/dvws/setup.sh"
   if [[ ! -f "$module_file" ]]; then
     log ERROR "Missing module: $module_file"
@@ -265,7 +265,7 @@ setup_dvws() {
   fi
   # shellcheck source=/dev/null
   source "$module_file"
-  setup_dvws_impl
+  dvws_setup_impl
 }
 
 # Early setup for vAPI to create .allow_build and fix warnings before build process
