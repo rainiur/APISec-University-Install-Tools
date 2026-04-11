@@ -140,9 +140,10 @@ EOF
         log ERROR "Required Security Shepherd build artifacts missing in target/ (coreSchema.sql, moduleSchemas.sql, moduleSchemas.js)."
         return 1
       fi
-      # The generated SQL comments out DELIMITER lines, which breaks stored
-      # procedure imports under the MariaDB docker entrypoint.
+      # The generated SQL uses CRLF and comments out DELIMITER blocks, which
+      # breaks stored procedure imports under the MariaDB docker entrypoint.
       sed -i \
+        -e 's/\r$//' \
         -e 's/^-- DELIMITER /DELIMITER /' \
         -e 's/^-- \$\$$/$$/' \
         "target/coreSchema.sql" "target/moduleSchemas.sql"
