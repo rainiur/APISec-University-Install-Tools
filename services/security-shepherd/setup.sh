@@ -140,6 +140,9 @@ EOF
         log ERROR "Required Security Shepherd build artifacts missing in target/ (coreSchema.sql, moduleSchemas.sql, moduleSchemas.js)."
         return 1
       fi
+      # The generated SQL comments out DELIMITER lines, which breaks stored
+      # procedure imports under the MariaDB docker entrypoint.
+      sed -i 's/^-- DELIMITER /DELIMITER /' "target/coreSchema.sql" "target/moduleSchemas.sql"
       # Also copy into the Docker build sub-contexts (docker/mariadb/ and docker/mongo/)
       # because those Dockerfiles use `COPY target/<file>` relative to their own context dir.
       mkdir -p docker/mariadb/target docker/mongo/target
