@@ -27,6 +27,17 @@ pixi_setup_impl() {
     sed -E -i 's/^(\s*)-\s*"8090:8090"/\1- "${PIXI_ADMIN_PORT:-18090}:8090"/g' "$compose_file" || true
   fi
 
+  # Patch the upstream app so malformed or alternate login form fields do not
+  # crash the Node process on user.toLowerCase().
+  local app_server="$dir/app/server.js"
+  if [[ -f "$app_server" ]]; then
+    grep -q "user = (user || '').toString().trim().toLowerCase();" "$app_server" || \
+      perl -0pi -e "s/user = user\\.toLowerCase\\(\\);/user = \(user || ''\)\.toString\(\)\.trim\(\)\.toLowerCase\(\);\n\t\tif \(!user || !pass\) {\n\t\t\tres.redirect\('\/login'\);\n\t\t\treturn;\n\t\t}/" "$app_server"
+
+    grep -q "req.body.user || req.body.email" "$app_server" || \
+      perl -0pi -e "s/app_authenticate\\(req\\.body\\.user, req\\.body\\.pass, req, res\\);/app_authenticate\(req.body.user || req.body.email, req.body.pass || req.body.password, req, res\);/" "$app_server"
+  fi
+
   # Set up port configuration with non-conflicting values
   write_env_port "$dir" PIXI_PORT 8084
   local env_file="$dir/.env"
