@@ -20,6 +20,20 @@ security_shepherd_setup_impl() {
     # MariaDB: map to mariadb:10.6.11 to match DB_VERSION
     sed -E -i 's|(image:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
     sed -E -i 's|(IMAGE_MARIADB:\s*)owasp/security-shepherd_mariadb|\1mariadb:10.6.11|g' "$dir/docker-compose.yml" || true
+
+    # Avoid overlap with host LAN subnets (for example 192.168.16.0/24)
+    # by pinning Security Shepherd's compose network to a safe private range.
+    sed -i 's/192\.168\.16\.0\/20/10.250.75.0\/24/g' "$dir/docker-compose.yml" || true
+    if ! grep -q '^networks:' "$dir/docker-compose.yml"; then
+      cat >> "$dir/docker-compose.yml" <<'EOF'
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.250.75.0/24
+EOF
+    fi
   fi
 
   # Remove stale containers from earlier installs to prevent port/name conflicts on compose up.
