@@ -263,7 +263,7 @@ setup_lab_dashboard_impl() {
                     <h3>WebGoat</h3>
                     <div class="port">Port: 8080</div>
                     <p>OWASP WebGoat - A deliberately insecure web application maintained by OWASP for learning web application security.</p>
-                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8080">Access WebGoat</a>
+                    <a href="#" target="_blank" class="access-btn" data-scheme="http" data-port="8080" data-path="/WebGoat/">Access WebGoat</a>
                     <br><a href="https://github.com/WebGoat/WebGoat" target="_blank" class="external-link">GitHub</a>
                 </div>
 
